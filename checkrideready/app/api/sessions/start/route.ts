@@ -34,3 +34,10 @@ export async function POST(req: Request) {
 
   return Response.json({ sessionId });
 }
+
+export async function GET() {
+  return Response.json(
+    { error: "Method not allowed. Use POST /api/sessions/start." },
+    { status: 405 }
+  );
+}

@@ -3,7 +3,6 @@ import { pool } from "@/lib/db";
 type Mode = "PPL" | "IR" | "CPL";
 
 function getUserId(): string {
-  // MVP placeholder. Replace with real auth later.
   return "demo-user";
 }
 
@@ -12,7 +11,13 @@ type SessionRow = {
   user_id: string;
   mode: Mode;
   status: "active" | "completed";
-  recent_question_ids: string; // JSON string
+  recent_question_ids: string;
+  probe_count_for_task: number;
+  max_probes_per_task: number;
+  current_question_id: string | null;
+  current_acs_task_code: string | null;
+  last_result: "PASS" | "PROBE" | "REMEDIATE" | "FAIL" | null;
+  last_feedback: string | null;
 };
 
 export async function POST(req: Request) {
@@ -25,9 +30,11 @@ export async function POST(req: Request) {
 
   const userId = getUserId();
 
-  // 1) Load session
   const [sessionRows] = await pool.execute(
-    `SELECT id, user_id, mode, status, recent_question_ids
+    `SELECT id, user_id, mode, status, recent_question_ids,
+            probe_count_for_task, max_probes_per_task,
+            current_question_id, current_acs_task_code,
+            last_result, last_feedback
      FROM sessions
      WHERE id = ?
      LIMIT 1`,
@@ -36,19 +43,12 @@ export async function POST(req: Request) {
 
   const session = (sessionRows as any[])[0] as SessionRow | undefined;
 
-  if (!session) {
-    return Response.json({ error: "Session not found" }, { status: 404 });
-  }
-
-  if (session.user_id !== userId) {
-    return Response.json({ error: "Forbidden" }, { status: 403 });
-  }
-
+  if (!session) return Response.json({ error: "Session not found" }, { status: 404 });
+  if (session.user_id !== userId) return Response.json({ error: "Forbidden" }, { status: 403 });
   if (session.status !== "active") {
     return Response.json({ error: "Session is not active" }, { status: 400 });
   }
 
-  // 2) Build exclusion list from recent_question_ids JSON
   let recentIds: string[] = [];
   try {
     recentIds = JSON.parse(session.recent_question_ids || "[]");
@@ -57,10 +57,55 @@ export async function POST(req: Request) {
     recentIds = [];
   }
 
-  // 3) Select a random question for this mode (avoid recent)
-  // Mode tags stored as JSON array; JSON_CONTAINS(mode_tags, '"PPL"') works.
+  if (
+    session.last_result === "PROBE" &&
+    session.probe_count_for_task > 0 &&
+    session.probe_count_for_task <= session.max_probes_per_task &&
+    session.current_question_id
+  ) {
+    const [baseRows] = await pool.execute(
+      `SELECT id, stem, probe_questions, acs_task_code, acs_area
+       FROM questions
+       WHERE id = ?
+       LIMIT 1`,
+      [session.current_question_id]
+    );
+
+    const baseQ = (baseRows as any[])[0];
+
+    if (baseQ) {
+      let probes: string[] = [];
+      try {
+        probes = JSON.parse(baseQ.probe_questions || "[]");
+        if (!Array.isArray(probes)) probes = [];
+      } catch {
+        probes = [];
+      }
+
+      if (probes.length > 0) {
+        const idx = Math.min(session.probe_count_for_task - 1, probes.length - 1);
+        const probeStem = probes[idx];
+
+        return Response.json({
+          question: {
+            id: `${baseQ.id}__probe_${session.probe_count_for_task}`,
+            stem: probeStem,
+            acs_task_code: baseQ.acs_task_code,
+            acs_area: `${baseQ.acs_area} (Probe)`,
+          },
+          meta: {
+            kind: "probe",
+            probeCount: session.probe_count_for_task,
+            maxProbes: session.max_probes_per_task,
+            baseQuestionId: baseQ.id,
+          },
+        });
+      }
+    }
+  }
+
   const mode = session.mode;
-  const modeJson = JSON.stringify(mode); // => "\"PPL\"" (a JSON string literal)
+  const modeJson = JSON.stringify(mode);
 
   let questionQuery = `
     SELECT id, stem, acs_task_code, acs_area
@@ -77,10 +122,9 @@ export async function POST(req: Request) {
 
   questionQuery += ` ORDER BY RAND() LIMIT 1`;
 
-  const [qRows] = await pool.execute(questionQuery, params);
+  let [qRows] = await pool.execute(questionQuery, params);
   let question = (qRows as any[])[0] as any | undefined;
 
-  // 4) If we excluded too many and got nothing, allow repeats (fallback)
   if (!question) {
     const [fallbackRows] = await pool.execute(
       `
@@ -102,8 +146,6 @@ export async function POST(req: Request) {
     );
   }
 
-  // 5) Update session: set current question + ACS code, reset probe count, update recent list
-  // Keep last 10 recents
   const newRecent = [question.id, ...recentIds.filter((x) => x !== question.id)].slice(0, 10);
 
   await pool.execute(
@@ -118,7 +160,6 @@ export async function POST(req: Request) {
     [question.id, question.acs_task_code, JSON.stringify(newRecent), sessionId]
   );
 
-  // 6) Return the question to the client
   return Response.json({
     question: {
       id: question.id,
@@ -126,5 +167,13 @@ export async function POST(req: Request) {
       acs_task_code: question.acs_task_code,
       acs_area: question.acs_area,
     },
+    meta: { kind: "base" },
   });
+}
+
+export async function GET() {
+  return Response.json(
+    { error: "Method not allowed. Use POST /api/sessions/next." },
+    { status: 405 }
+  );
 }

@@ -1,0 +1,16 @@
+
+> checkrideready@0.1.0 dev
+> next dev -p 3000
+
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.1.3:3000
+- Environments: .env.local
+
+✓ Starting...
+✓ Ready in 713ms
+ GET /api/session/results?sessionId=anything 404 in 1015ms (compile: 319ms, render: 696ms)
+ GET /api/session/results?sessionId=anything 404 in 101ms (compile: 4ms, render: 97ms)
+ POST /api/session/start 200 in 295ms (compile: 101ms, render: 194ms)
+ POST /api/session/next 404 in 706ms (compile: 125ms, render: 581ms)
+ GET /api/session/list 200 in 273ms (compile: 78ms, render: 194ms)
