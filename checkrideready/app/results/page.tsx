@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { readJsonResponse } from "@/lib/http";
 
 type SessionRow = {
   id: string;
@@ -29,8 +30,7 @@ export default function ResultsIndexPage() {
 
       try {
         const res = await fetch("/api/sessions/list");
-        const text = await res.text();
-        const json = text ? JSON.parse(text) : {};
+        const json = await readJsonResponse<{ sessions?: SessionRow[]; error?: string }>(res);
         if (!res.ok) throw new Error(json?.error || "Failed to load sessions");
 
         setSessions(json.sessions || []);

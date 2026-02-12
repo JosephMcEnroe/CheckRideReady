@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { readJsonResponse } from "@/lib/http";
 
 type Result = "PASS" | "PROBE" | "REMEDIATE" | "FAIL";
 
@@ -45,8 +46,7 @@ export default function ResultsPage() {
 
       try {
         const res = await fetch(`/api/sessions/results?sessionId=${encodeURIComponent(sessionId)}`);
-        const text = await res.text();
-        const json = text ? JSON.parse(text) : {};
+        const json = await readJsonResponse<ApiResponse & { error?: string }>(res);
         if (!res.ok) throw new Error(json?.error || "Failed to load results");
 
         setData(json);

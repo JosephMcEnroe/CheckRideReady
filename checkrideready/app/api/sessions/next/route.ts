@@ -18,11 +18,13 @@ type SessionRow = {
   current_acs_task_code: string | null;
   last_result: "PASS" | "PROBE" | "REMEDIATE" | "FAIL" | null;
   last_feedback: string | null;
+  last_probe_question: string | null;
 };
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const sessionId = body?.sessionId as string | undefined;
+  const forceNewBase = body?.forceNewBase === true;
 
   if (!sessionId) {
     return Response.json({ error: "Missing sessionId" }, { status: 400 });
@@ -34,7 +36,7 @@ export async function POST(req: Request) {
     `SELECT id, user_id, mode, status, recent_question_ids,
             probe_count_for_task, max_probes_per_task,
             current_question_id, current_acs_task_code,
-            last_result, last_feedback
+            last_result, last_feedback, last_probe_question
      FROM sessions
      WHERE id = ?
      LIMIT 1`,
@@ -57,14 +59,18 @@ export async function POST(req: Request) {
     recentIds = [];
   }
 
-  if (
-    session.last_result === "PROBE" &&
+  const shouldProbe =
+    !forceNewBase &&
+    (session.last_result === "PROBE" ||
+      session.last_result === "REMEDIATE" ||
+      session.last_result === "FAIL") &&
     session.probe_count_for_task > 0 &&
     session.probe_count_for_task <= session.max_probes_per_task &&
-    session.current_question_id
-  ) {
+    session.current_question_id;
+
+  if (shouldProbe && session.last_probe_question) {
     const [baseRows] = await pool.execute(
-      `SELECT id, stem, probe_questions, acs_task_code, acs_area
+      `SELECT id, acs_task_code, acs_area
        FROM questions
        WHERE id = ?
        LIMIT 1`,
@@ -72,35 +78,21 @@ export async function POST(req: Request) {
     );
 
     const baseQ = (baseRows as any[])[0];
-
     if (baseQ) {
-      let probes: string[] = [];
-      try {
-        probes = JSON.parse(baseQ.probe_questions || "[]");
-        if (!Array.isArray(probes)) probes = [];
-      } catch {
-        probes = [];
-      }
-
-      if (probes.length > 0) {
-        const idx = Math.min(session.probe_count_for_task - 1, probes.length - 1);
-        const probeStem = probes[idx];
-
-        return Response.json({
-          question: {
-            id: `${baseQ.id}__probe_${session.probe_count_for_task}`,
-            stem: probeStem,
-            acs_task_code: baseQ.acs_task_code,
-            acs_area: `${baseQ.acs_area} (Probe)`,
-          },
-          meta: {
-            kind: "probe",
-            probeCount: session.probe_count_for_task,
-            maxProbes: session.max_probes_per_task,
-            baseQuestionId: baseQ.id,
-          },
-        });
-      }
+      return Response.json({
+        question: {
+          id: `${baseQ.id}__probe_${session.probe_count_for_task}`,
+          stem: session.last_probe_question,
+          acs_task_code: baseQ.acs_task_code,
+          acs_area: `${baseQ.acs_area} (Probe)`,
+        },
+        meta: {
+          kind: "probe",
+          probeCount: session.probe_count_for_task,
+          maxProbes: session.max_probes_per_task,
+          baseQuestionId: baseQ.id,
+        },
+      });
     }
   }
 
@@ -122,7 +114,7 @@ export async function POST(req: Request) {
 
   questionQuery += ` ORDER BY RAND() LIMIT 1`;
 
-  let [qRows] = await pool.execute(questionQuery, params);
+  const [qRows] = await pool.execute(questionQuery, params);
   let question = (qRows as any[])[0] as any | undefined;
 
   if (!question) {

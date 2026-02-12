@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { readJsonResponse } from "@/lib/http";
 
 type Question = {
   id: string;
@@ -10,11 +11,27 @@ type Question = {
   acs_area: string;
 };
 
+type NextMeta = {
+  kind?: "base" | "probe";
+  probeCount?: number;
+  maxProbes?: number;
+  baseQuestionId?: string;
+};
+
+type PromptEntry = {
+  id: string;
+  stem: string;
+  kind: "base" | "probe";
+};
+
 type SubmitResponse = {
   attemptId: string;
   result: "PASS" | "PROBE" | "REMEDIATE" | "FAIL";
   feedback: string;
   confidence: number;
+  missing_points: string[];
+  probe_question: string;
+  recommended_delta: number;
   acs_task_code: string;
 };
 
@@ -25,6 +42,7 @@ export default function SessionPage() {
   const [loadingQuestion, setLoadingQuestion] = useState(false);
   const [questionError, setQuestionError] = useState<string | null>(null);
   const [question, setQuestion] = useState<Question | null>(null);
+  const [promptThread, setPromptThread] = useState<PromptEntry[]>([]);
 
   const [answer, setAnswer] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -37,7 +55,7 @@ export default function SessionPage() {
   // If true, we are auto-advancing to a probe prompt
   const [autoAdvancing, setAutoAdvancing] = useState(false);
 
-  async function fetchNextQuestion() {
+  async function fetchNextQuestion(opts?: { forceNewBase?: boolean }) {
     if (!sessionId) return;
 
     setLoadingQuestion(true);
@@ -47,14 +65,40 @@ export default function SessionPage() {
       const res = await fetch("/api/sessions/next", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId }),
+        body: JSON.stringify({ sessionId, forceNewBase: opts?.forceNewBase === true }),
       });
 
-      const text = await res.text();
-      const data = text ? JSON.parse(text) : {};
+      const data = await readJsonResponse<{
+        question?: Question;
+        meta?: NextMeta;
+        error?: string;
+      }>(res);
       if (!res.ok) throw new Error(data?.error || "Failed to fetch next prompt");
+      if (!data.question) throw new Error("No question returned from server");
+      const nextQuestion = data.question;
+      const nextKind = data.meta?.kind === "probe" ? "probe" : "base";
 
-      setQuestion(data.question);
+      setQuestion(nextQuestion);
+      setPromptThread((prev) => {
+        const entry: PromptEntry = {
+          id: nextQuestion.id,
+          stem: nextQuestion.stem,
+          kind: nextKind,
+        };
+
+        if (nextKind === "base") {
+          return [entry];
+        }
+
+        if (prev.some((p) => p.id === entry.id)) {
+          return prev;
+        }
+
+        return [...prev, entry];
+      });
+      if (nextKind === "base") {
+        setLastEval(null);
+      }
       setAnswer("");
       setSubmitError(null);
     } catch (e: any) {
@@ -86,17 +130,16 @@ export default function SessionPage() {
         }),
       });
 
-      const text = await res.text();
-      const data = text ? JSON.parse(text) : {};
+      const data = await readJsonResponse<SubmitResponse & { error?: string }>(res);
       if (!res.ok) throw new Error(data?.error || "Submit failed");
 
       const evalData = data as SubmitResponse;
       setLastEval(evalData);
 
-      // ✅ Auto-probe behavior:
-      // If the result is PROBE, immediately fetch the next prompt.
+  // ✅ Auto-probe behavior:
+  // For any non-PASS result, immediately fetch the next prompt.
       // /api/sessions/next will return a "(Probe)" question due to session state.
-      if (evalData.result === "PROBE") {
+      if (evalData.result !== "PASS") {
         setAutoAdvancing(true);
         // small delay so the user sees the PROBE badge flash
         setTimeout(() => {
@@ -166,6 +209,16 @@ export default function SessionPage() {
     },
     body: { padding: 16 },
     h2: { margin: "6px 0 10px 0", fontSize: 18, fontWeight: 800 },
+    threadWrap: { marginBottom: 14 },
+    threadItem: {
+      padding: 12,
+      borderRadius: 12,
+      border: "1px solid rgba(255,255,255,0.10)",
+      background: "rgba(0,0,0,0.20)",
+      marginBottom: 8,
+    },
+    threadLabel: { fontSize: 12, opacity: 0.78, fontWeight: 800, marginBottom: 6 },
+    threadText: { fontSize: 15, lineHeight: 1.5 },
     prompt: {
       fontSize: 18,
       lineHeight: 1.65,
@@ -222,11 +275,12 @@ export default function SessionPage() {
 
   // Show the evaluation panel as "DPE Notes" during probing
   const showDpeNotesWhileAnswering =
-    lastEval && lastEval.result === "PROBE"; // keep notes visible while probing
+    lastEval && lastEval.result !== "PASS";
 
-  // Only show the "final eval + Continue" panel when not PROBE
+  // Only show the "final eval + Continue" panel for PASS
   const showFinalEvalPanel =
-    lastEval && lastEval.result !== "PROBE";
+    lastEval && lastEval.result === "PASS";
+  const isProbeActive = question?.id.includes("__probe_") ?? false;
 
   return (
     <main style={styles.page}>
@@ -261,10 +315,26 @@ export default function SessionPage() {
 
           {!loadingQuestion && !questionError && question && (
             <>
-              <div>
-                <div style={styles.h2}>Prompt</div>
-                <div style={styles.prompt}>{question.stem}</div>
-              </div>
+              {promptThread.length > 0 && (
+                <div style={styles.threadWrap}>
+                  <div style={styles.h2}>Question Thread</div>
+                  {promptThread.map((p, idx) => (
+                    <div key={p.id} style={styles.threadItem}>
+                      <div style={styles.threadLabel}>
+                        {p.kind === "base" ? "Base Question" : `Probe ${idx}`}
+                      </div>
+                      <div style={styles.threadText}>{p.stem}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!isProbeActive && (
+                <div>
+                  <div style={styles.h2}>Prompt</div>
+                  <div style={styles.prompt}>{question.stem}</div>
+                </div>
+              )}
 
               {/* DPE Notes (shows during probing) */}
               {showDpeNotesWhileAnswering && (
@@ -337,7 +407,7 @@ export default function SessionPage() {
                     </button>
 
                     <button
-                      onClick={fetchNextQuestion}
+                      onClick={() => fetchNextQuestion({ forceNewBase: true })}
                       disabled={loadingQuestion || !sessionId}
                       style={{
                         ...styles.btn,

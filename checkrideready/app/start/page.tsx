@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { readJsonResponse } from "@/lib/http";
 
 type Mode = "PPL" | "IR" | "CPL";
 
@@ -19,7 +20,7 @@ export default function StartPage() {
         body: JSON.stringify({ mode }),
       });
 
-      const data = await res.json();
+      const data = await readJsonResponse<{ sessionId?: string; error?: string }>(res);
       if (!res.ok) throw new Error(data?.error || "Failed to start session");
 
       window.location.href = `/session/${data.sessionId}`;
