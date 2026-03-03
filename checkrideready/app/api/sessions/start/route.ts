@@ -1,4 +1,5 @@
 import { pool } from "@/lib/db";
+import { auth } from "@/auth";
 
 type Mode = "PPL" | "IR" | "CPL";
 
@@ -6,11 +7,13 @@ function isMode(v: unknown): v is Mode {
   return v === "PPL" || v === "IR" || v === "CPL";
 }
 
-function getUserId(): string {
-  return "demo-user";
-}
-
 export async function POST(req: Request) {
+  const authSession = await auth();
+  const userId = (authSession?.user as { id?: string } | undefined)?.id;
+  if (!userId) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await req.json().catch(() => ({}));
   const mode = body?.mode;
 
@@ -22,10 +25,9 @@ export async function POST(req: Request) {
   }
 
   const sessionId = crypto.randomUUID();
-  const userId = getUserId();
 
   await pool.execute(
-    `INSERT INTO sessions
+    `INSERT INTO oral_sessions
       (id, user_id, mode, status, probe_count_for_task, max_probes_per_task, recent_question_ids)
      VALUES
       (?, ?, ?, 'active', 0, 2, JSON_ARRAY())`,
@@ -41,3 +43,4 @@ export async function GET() {
     { status: 405 }
   );
 }
+

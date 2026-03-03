@@ -13,14 +13,25 @@ type EvaluateInput = {
   questionStem: string;
   studentAnswer: string;
   acsTaskCode: string;
+  escalationLevel?: number;
+  priorFollowUps?: string[];
+  priorThread?: Array<{
+    question: string;
+    answer: string | null;
+    feedback: string | null;
+    result: EvaluationResultCode | null;
+  }>;
 };
 
 const MODEL = process.env.OPENAI_MODEL || "gpt-4.1";
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 
-const SYSTEM_PROMPT = `You are an FAA DPE-style oral evaluator.
-Evaluate only this answer against this question and ACS task.
-Grade for structure, regulatory/source correctness, and safety/risk emphasis.
+const SYSTEM_PROMPT = `You are an FAA DPE-style oral examiner for an interactive oral exam thread.
+Evaluate the current student answer against the current examiner prompt and ACS task.
+Analyze strengths, weak areas, missed details, shallow reasoning, risk areas, regulatory gaps, and decision quality.
+Then generate one targeted examiner follow-up question that probes weakness and slightly increases difficulty.
+Follow-up must be specific, scenario-based when appropriate, and non-repetitive with prior follow-ups.
+Never end with praise-only response. Never summarize and stop unless mastery is clear.
 Return ONLY valid JSON. No markdown. No extra keys.
 
 Required JSON:
@@ -143,9 +154,43 @@ async function runOpenAI(messages: Array<{ role: "system" | "user"; content: str
 }
 
 export async function evaluateWithOpenAI(input: EvaluateInput): Promise<OpenAIEvaluation | null> {
-  const baseUserPrompt = `Question stem: ${input.questionStem}
+  const priorFollowUps = (input.priorFollowUps || []).filter(Boolean).slice(-6);
+  const priorThread = (input.priorThread || []).slice(-6);
+  const escalationLevel = Number.isFinite(input.escalationLevel) ? Number(input.escalationLevel) : 0;
+
+  const threadContext =
+    priorThread.length > 0
+      ? priorThread
+          .map((item, idx) => {
+            const answer = item.answer?.trim() || "(no answer)";
+            const feedback = item.feedback?.trim() || "(no feedback)";
+            return `Thread ${idx + 1}:
+- Question: ${item.question}
+- Answer: ${answer}
+- Feedback: ${feedback}
+- Result: ${item.result || "N/A"}`;
+          })
+          .join("\n")
+      : "No prior thread items.";
+
+  const followUpsContext =
+    priorFollowUps.length > 0
+      ? priorFollowUps.map((q, idx) => `${idx + 1}. ${q}`).join("\n")
+      : "None.";
+
+  const baseUserPrompt = `Current examiner prompt: ${input.questionStem}
 ACS task code: ${input.acsTaskCode}
-Student answer: ${input.studentAnswer}`;
+Student answer: ${input.studentAnswer}
+Current escalation level: ${escalationLevel}
+Prior thread context:
+${threadContext}
+Prior follow-up questions (do not repeat or paraphrase these):
+${followUpsContext}
+
+Rules for probe_question:
+- Return a single follow-up examiner question unless mastery is clearly demonstrated.
+- If mastery is clearly demonstrated, you may return null.
+- If returning a question, it must be targeted and harder than the current prompt.`;
 
   let raw = await runOpenAI([
     { role: "system", content: SYSTEM_PROMPT },

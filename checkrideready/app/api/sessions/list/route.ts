@@ -1,57 +1,88 @@
 import { pool } from "@/lib/db";
+import { auth } from "@/auth";
 
-function getUserId(): string {
-  return "demo-user";
-}
+// To clean dev data:
+// DELETE FROM attempt_log;
+// DELETE FROM session_questions;
+// DELETE FROM oral_sessions;
 
-const toNum = (v: any) => (v === null || v === undefined ? 0 : Number(v));
+type SessionListRow = {
+  id: string;
+  created_at: string;
+  topic: string | null;
+  last_result: "PASS" | "PROBE" | "REMEDIATE" | "FAIL" | null;
+  score: number | null;
+  duration_seconds: number | null;
+  question_count: number | null;
+};
 
 export async function GET() {
-  const userId = getUserId();
+  const authSession = await auth();
+  const userId = (authSession?.user as { id?: string } | undefined)?.id;
+  if (!userId) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const [rows] = await pool.execute(
     `
     SELECT
       s.id,
-      s.mode,
-      s.status,
-      s.created_at,
-
-      COALESCE(a.total, 0) AS total,
-      COALESCE(a.passCount, 0) AS passCount,
-      COALESCE(a.probeCount, 0) AS probeCount,
-      COALESCE(a.remediateCount, 0) AS remediateCount,
-      COALESCE(a.failCount, 0) AS failCount,
-
-      COALESCE(a.lastAttemptAt, s.created_at) AS lastAttemptAt
-    FROM sessions s
+      COALESCE(s.started_at, s.created_at) AS created_at,
+      COALESCE(topic.latest_topic, s.current_acs_task_code, s.mode) AS topic,
+      s.last_result,
+      stats.score,
+      CASE
+        WHEN s.started_at IS NULL THEN NULL
+        WHEN s.ended_at IS NULL THEN TIMESTAMPDIFF(SECOND, s.started_at, NOW())
+        ELSE TIMESTAMPDIFF(SECOND, s.started_at, s.ended_at)
+      END AS duration_seconds,
+      stats.question_count
+    FROM oral_sessions s
     LEFT JOIN (
       SELECT
-        session_id,
-        COUNT(*) AS total,
-        SUM(result='PASS') AS passCount,
-        SUM(result='PROBE') AS probeCount,
-        SUM(result='REMEDIATE') AS remediateCount,
-        SUM(result='FAIL') AS failCount,
-        MAX(created_at) AS lastAttemptAt
-      FROM attempt_log
-      GROUP BY session_id
-    ) a ON a.session_id = s.id
+        sq.session_id,
+        ROUND(
+          AVG(
+            CASE sq.result
+              WHEN 'PASS' THEN 1.0
+              WHEN 'PROBE' THEN 0.7
+              WHEN 'REMEDIATE' THEN 0.4
+              WHEN 'FAIL' THEN 0.0
+              ELSE NULL
+            END
+          ) * 100
+        ) AS score,
+        COUNT(*) AS question_count
+      FROM session_questions sq
+      WHERE sq.result IS NOT NULL
+      GROUP BY sq.session_id
+    ) stats ON stats.session_id = s.id
+    LEFT JOIN (
+      SELECT sq1.session_id, sq1.acs_task AS latest_topic
+      FROM session_questions sq1
+      INNER JOIN (
+        SELECT session_id, MAX(id) AS max_id
+        FROM session_questions
+        GROUP BY session_id
+      ) latest ON latest.session_id = sq1.session_id AND latest.max_id = sq1.id
+    ) topic ON topic.session_id = s.id
     WHERE s.user_id = ?
-    ORDER BY lastAttemptAt DESC
-    LIMIT 50
+    ORDER BY COALESCE(s.started_at, s.created_at) DESC
+    LIMIT 100
     `,
     [userId]
   );
 
-  const sessions = (rows as any[]).map((s) => ({
-    ...s,
-    total: toNum(s.total),
-    passCount: toNum(s.passCount),
-    probeCount: toNum(s.probeCount),
-    remediateCount: toNum(s.remediateCount),
-    failCount: toNum(s.failCount),
+  const sessions = (rows as SessionListRow[]).map((row) => ({
+    id: row.id,
+    created_at: row.created_at,
+    topic: row.topic,
+    last_result: row.last_result,
+    score: row.score === null ? null : Number(row.score),
+    duration_seconds: row.duration_seconds === null ? null : Number(row.duration_seconds),
+    question_count: row.question_count === null ? null : Number(row.question_count),
   }));
 
   return Response.json({ sessions });
 }
+

@@ -1,8 +1,13 @@
-⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
- We detected multiple lockfiles and selected the directory of C:\Users\Joseph\package-lock.json as the root directory.
- To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
-   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
- Detected additional lockfiles: 
-   * C:\Users\Joseph\Desktop\CheckRideReady\checkrideready\package-lock.json
-
-^C
+Error: spawn EPERM
+    at ChildProcess.spawn (node:internal/child_process:420:11)
+    at spawn (node:child_process:796:9)
+    at fork (node:child_process:174:10)
+    at C:\Users\Joseph\Desktop\CheckRideReady\checkrideready\node_modules\next\dist\cli\next-dev.js:243:45
+    at new Promise (<anonymous>)
+    at startServer (C:\Users\Joseph\Desktop\CheckRideReady\checkrideready\node_modules\next\dist\cli\next-dev.js:212:16)
+    at runDevServer (C:\Users\Joseph\Desktop\CheckRideReady\checkrideready\node_modules\next\dist\cli\next-dev.js:334:23)
+    at Module.nextDev (C:\Users\Joseph\Desktop\CheckRideReady\checkrideready\node_modules\next\dist\cli\next-dev.js:342:11) {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'spawn'
+}

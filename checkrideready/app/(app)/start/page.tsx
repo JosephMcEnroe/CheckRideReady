@@ -23,9 +23,9 @@ export default function StartPage() {
       const data = await readJsonResponse<{ sessionId?: string; error?: string }>(res);
       if (!res.ok) throw new Error(data?.error || "Failed to start session");
 
-      window.location.href = `/session/${data.sessionId}`;
-    } catch (e: any) {
-      setError(e.message || "Unknown error");
+      window.location.href = `/sessions/${data.sessionId}`;
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Unknown error");
       setLoading(null);
     }
   }
