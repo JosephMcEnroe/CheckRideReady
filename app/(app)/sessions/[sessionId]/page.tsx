@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { ArrowRight, Download, FileText, Send } from "lucide-react";
+import { ArrowRight, Download, FileText, Mic, Send } from "lucide-react";
 import { StatusBadge } from "@/components/figma/StatusBadge";
 import { readJsonResponse } from "@/lib/http";
 
@@ -150,6 +150,11 @@ export default function SessionPage() {
     return questions.slice(activeThreadStartIndex).filter((q) => q.result !== null);
   }, [activeThreadStartIndex, questions]);
 
+  const activeThreadQuestions = useMemo(() => {
+    if (activeThreadStartIndex < 0) return [];
+    return questions.slice(activeThreadStartIndex);
+  }, [activeThreadStartIndex, questions]);
+
   const baseQuestionForPrompt = useMemo(() => {
     const active = currentPrompt || pendingPromptFromHistory;
     if (!active) return null;
@@ -190,15 +195,18 @@ export default function SessionPage() {
       return;
     }
 
-    setCurrentPrompt({
+    const nextPrompt = {
       questionId: json.question.id,
       sessionQuestionId: json.question.session_question_id,
       stem: json.question.stem,
       acsTask: json.question.acs_task_code,
       acsArea: json.question.acs_area,
       kind: json.meta?.kind === "probe" ? "probe" : "base",
-    });
+    } satisfies PromptState;
+
+    setCurrentPrompt(nextPrompt);
     setLastSubmission(null);
+    return nextPrompt;
   }
 
   useEffect(() => {
@@ -304,9 +312,21 @@ export default function SessionPage() {
     setBusy(true);
     setError(null);
     try {
+      setCurrentPrompt(null);
       await requestNextQuestion(false);
       setLastSubmission(null);
-      await loadResults();
+      const results = await loadResults();
+      const pending = results?.questions?.find((q) => q.result === null);
+      if (pending) {
+        setCurrentPrompt({
+          questionId: pending.question_id || String(pending.id),
+          sessionQuestionId: pending.id,
+          stem: displayQuestionText(pending.question_text),
+          acsTask: pending.acs_task,
+          acsArea: pending.acs_area,
+          kind: pending.is_probe ? "probe" : "base",
+        });
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load next question");
     } finally {
@@ -319,9 +339,22 @@ export default function SessionPage() {
     setBusy(true);
     setError(null);
     try {
+      setAnswer("");
+      setCurrentPrompt(null);
       await requestNextQuestion(true);
       setLastSubmission(null);
-      await loadResults();
+      const results = await loadResults();
+      const pending = results?.questions?.find((q) => q.result === null);
+      if (pending) {
+        setCurrentPrompt({
+          questionId: pending.question_id || String(pending.id),
+          sessionQuestionId: pending.id,
+          stem: displayQuestionText(pending.question_text),
+          acsTask: pending.acs_task,
+          acsArea: pending.acs_area,
+          kind: pending.is_probe ? "probe" : "base",
+        });
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to fetch a new prompt");
     } finally {
@@ -329,159 +362,350 @@ export default function SessionPage() {
     }
   }
 
+  function handleExportNotes() {
+    const notesSections: string[] = [];
+
+    for (const row of questions) {
+      const timestamp = new Date(row.created_at).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      notesSections.push(`[${timestamp}] AI Question:\n${displayQuestionText(row.question_text)}`);
+
+      if (row.user_answer) {
+        notesSections.push(`[${timestamp}] Your Answer:\n${row.user_answer}`);
+      }
+
+      if (row.ai_feedback) {
+        notesSections.push(`[${timestamp}] AI Feedback:\n${row.ai_feedback}`);
+      }
+    }
+
+    if (activePrompt && !questions.find((row) => row.id === activePrompt.sessionQuestionId)) {
+      notesSections.push(`[Current] AI Question:\n${activePrompt.stem}`);
+    }
+
+    if (lastSubmission) {
+      notesSections.push(`[Current] AI Feedback (${lastSubmission.result}):\n${lastSubmission.feedback}`);
+    }
+
+    const blob = new Blob([notesSections.join("\n\n")], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `session-${sessionId || "notes"}.txt`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const currentStatus = humanResult(threadAnswered.at(-1)?.result || null);
+  const progressValue =
+    sessionStatus === "completed"
+      ? 100
+      : Math.max(
+          activePrompt ? 12 : 0,
+          Math.min(92, Math.round(((threadAnswered.length + (activePrompt ? 1 : 0)) / Math.max(threadAnswered.length + 1, 1)) * 100))
+        );
+
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold text-foreground">Oral Session</h1>
-          <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-            <span>Session {sessionId ? shortId(sessionId) : "-"}</span>
+    <div className="mx-auto max-w-[1100px] space-y-6 px-4 pb-8 pt-2 sm:px-6">
+      <div className="space-y-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <span>Session {sessionId ? shortId(sessionId) : "-"}</span>
+              <span className="hidden h-1 w-1 rounded-full bg-muted-foreground/50 sm:inline-block" />
+              <span>{activePrompt?.acsArea || "Topic loading"}</span>
+            </div>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground">Oral Exam Session</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center rounded-full border border-white/30 bg-white/10 px-3 py-1 text-xs font-medium text-[#1e3a5f] backdrop-blur-sm">
+                {activePrompt?.acsTask || "ACS task pending"}
+              </span>
+              <StatusBadge status={sessionStatus === "completed" ? "PASS" : "IN_PROGRESS"} />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/sessions"
+              className="inline-flex items-center rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
+            >
+              Back to Sessions
+            </Link>
             {sessionId && (
-              <Link href={`/sessions/${sessionId}/debrief`} className="text-[#1e3a5f] hover:text-[#2d5a8f] font-medium">
+              <Link
+                href={`/sessions/${sessionId}/debrief`}
+                className="inline-flex items-center rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
+              >
                 View Debrief
               </Link>
+            )}
+            {sessionId && (
+              <a
+                href={`/api/sessions/${sessionId}/pdf`}
+                className="inline-flex items-center gap-2 rounded-lg bg-[#ff6b35] px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#ff5722]"
+              >
+                <Download className="h-4 w-4" />
+                Download Debrief PDF
+              </a>
             )}
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            href="/sessions"
-            className="px-4 py-2 rounded-lg border border-border bg-card text-foreground hover:bg-secondary transition-colors"
-          >
-            Back to Sessions
-          </Link>
-          {sessionId && (
-            <Link
-              href={`/sessions/${sessionId}/debrief`}
-              className="px-4 py-2 rounded-lg border border-border bg-card text-foreground hover:bg-secondary transition-colors"
-            >
-              View Debrief
-            </Link>
-          )}
-          {sessionId && (
-            <a
-              href={`/api/sessions/${sessionId}/pdf`}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#ff6b35] hover:bg-[#ff5722] text-white transition-colors"
-            >
-              <Download className="h-4 w-4" />
-              Download Debrief PDF
-            </a>
-          )}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>Current Status: {currentStatus}</span>
+            <span>{sessionStatus === "completed" ? "Session complete" : activePrompt?.kind === "probe" ? "Follow-up in progress" : "Question active"}</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-slate-200/80">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-[#1e3a5f] via-[#2d5a8f] to-[#5c8fd9] transition-all duration-500"
+              style={{ width: `${progressValue}%` }}
+            />
+          </div>
         </div>
       </div>
 
-      {error && <div className="rounded-lg border border-red-200 bg-red-50 text-red-700 px-4 py-3">{error}</div>}
+      {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-700 shadow-sm">{error}</div>}
 
-      <div className="flex flex-wrap gap-2">
-        <span className="inline-flex items-center rounded-md px-2.5 py-1 border font-medium bg-[#1e3a5f]/10 text-[#1e3a5f] border-[#1e3a5f]/20">
-          {activePrompt?.acsTask || "ACS task pending"}
-        </span>
-        <span className="inline-flex items-center rounded-md px-2.5 py-1 border font-medium bg-secondary text-secondary-foreground border-border">
-          {activePrompt?.acsArea || "Topic loading"}
-        </span>
-        <StatusBadge status={sessionStatus === "completed" ? "PASS" : "IN_PROGRESS"} />
-      </div>
-
-      <div className="bg-card rounded-xl border border-border p-6 space-y-4">
-        <h2 className="text-xl font-semibold text-foreground">Question Thread</h2>
-
-        <div className="rounded-lg border border-border bg-secondary/20 p-4 space-y-2">
-          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Base Question</p>
-          <p className="text-foreground">{baseQuestionForPrompt || "Loading base question..."}</p>
+      {sessionStatus === "completed" ? (
+        <div className="rounded-xl border border-border bg-card p-8 text-center shadow-sm sm:p-12">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#22c55e]/10">
+            <FileText className="h-8 w-8 text-[#22c55e]" />
+          </div>
+          <div className="mt-6 space-y-2">
+            <h2 className="text-2xl font-semibold text-foreground">Session Complete</h2>
+            <p className="mx-auto max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
+              Your responses have been processed. Open the debrief to review the final evaluation and download the session report.
+            </p>
+          </div>
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
+            {sessionId && (
+              <Link
+                href={`/sessions/${sessionId}/debrief`}
+                className="inline-flex items-center gap-2 rounded-lg bg-[#1e3a5f] px-6 py-3 font-medium text-white transition-colors hover:bg-[#2d5a8f]"
+              >
+                View Debrief
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            )}
+            {sessionId && (
+              <a
+                href={`/api/sessions/${sessionId}/pdf`}
+                className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-6 py-3 font-medium text-foreground transition-colors hover:bg-secondary"
+              >
+                <Download className="h-4 w-4" />
+                Download Debrief PDF
+              </a>
+            )}
+          </div>
         </div>
-
-        <div className="rounded-lg border border-border bg-secondary/40 p-4 space-y-2">
-          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            {activePrompt?.kind === "probe" ? "Examiner Follow-Up" : "Prompt"}
-          </p>
-          <p className="text-foreground">{activePrompt?.stem || "Loading prompt..."}</p>
-        </div>
-
-        {threadAnswered.length > 0 && (
-          <div className="space-y-3 pt-2">
-            {threadAnswered.map((row, idx) => (
-              <div key={row.id} className="rounded-lg border border-border p-4 bg-background/40 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-medium text-foreground">
-                    Thread Item {idx + 1}
-                    {row.is_probe ? " - Examiner Follow-Up" : ""}
+      ) : (
+        <>
+          <section className="overflow-hidden rounded-xl bg-gradient-to-br from-[#163454] via-[#1e3a5f] to-[#2d5a8f] p-8 text-white shadow-[0_20px_60px_-25px_rgba(30,58,95,0.65)]">
+            <div className="space-y-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3 text-sm text-white/80">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-sm font-semibold text-white ring-1 ring-white/20">
+                    Q
+                  </span>
+                  <div>
+                    <p className="font-medium uppercase tracking-[0.18em] text-white/70">Current Question</p>
+                    <p className="text-xs text-white/60">
+                      {activePrompt?.kind === "probe" ? "Examiner Follow-Up" : "Primary Prompt"}
+                    </p>
                   </div>
-                  <StatusBadge status={row.result || "IN_PROGRESS"} />
                 </div>
-                <div className="text-sm text-foreground">
-                  <span className="font-medium">Question:</span> {displayQuestionText(row.question_text)}
-                </div>
-                <div className="text-sm text-foreground">
-                  <span className="font-medium">Your Answer:</span> {row.user_answer || "No answer"}
-                </div>
-                <div className="text-sm text-foreground">
-                  <span className="font-medium">Examiner Feedback:</span> {row.ai_feedback || "No feedback"}
+                <div className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white/80">
+                  {activePrompt?.acsArea || "Preparing prompt"}
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
 
-      <div className="bg-card rounded-xl border border-border p-6 space-y-4">
-        <label className="block text-sm font-medium text-foreground">Your Answer</label>
-        <textarea
-          value={answer}
-          onChange={(e) => setAnswer(e.target.value)}
-          placeholder="Type your answer here..."
-          className="w-full min-h-[140px] p-4 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] resize-none"
-          disabled={busy || loading || sessionStatus === "completed" || isAwaitingNext}
-        />
+              {baseQuestionForPrompt && activePrompt?.kind === "probe" && (
+                <div className="rounded-xl border border-white/15 bg-white/8 p-4 backdrop-blur-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">Base Question</p>
+                  <p className="mt-2 text-sm leading-6 text-white/85">{baseQuestionForPrompt}</p>
+                </div>
+              )}
 
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={handleSubmit}
-            disabled={!answer.trim() || busy || !activePrompt || sessionStatus === "completed" || isAwaitingNext}
-            className="inline-flex items-center gap-2 bg-[#1e3a5f] hover:bg-[#2d5a8f] text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Send className="h-4 w-4" />
-            Submit Answer
-          </button>
-
-          <button
-            onClick={handleNextQuestion}
-            disabled={busy || !sessionId || sessionStatus === "completed" || !isAwaitingNext}
-            className="inline-flex items-center gap-2 bg-[#1e3a5f] hover:bg-[#2d5a8f] text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <ArrowRight className="h-4 w-4" />
-            Next Question
-          </button>
-
-          <button
-            onClick={handleSkipPrompt}
-            disabled={busy || !sessionId || sessionStatus === "completed"}
-            className="inline-flex items-center gap-2 bg-[#ff6b35] hover:bg-[#ff5722] text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <ArrowRight className="h-4 w-4" />
-            Skip / New Prompt
-          </button>
-        </div>
-
-        {lastSubmission && (
-          <div className="rounded-lg border border-border p-4 bg-secondary/30 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-medium text-foreground">AI Evaluator Feedback</div>
-              <StatusBadge status={lastSubmission.result} />
+              <p className="max-w-4xl text-2xl font-semibold leading-relaxed text-white sm:text-[1.85rem]">
+                {activePrompt?.stem || (loading ? "Loading question..." : "Waiting for next question...")}
+              </p>
             </div>
-            <p className="text-sm text-foreground">{lastSubmission.feedback}</p>
-          </div>
-        )}
+          </section>
 
-        {sessionStatus === "completed" && (
-          <div className="rounded-lg border border-[#22c55e]/30 bg-[#22c55e]/10 text-[#166534] px-4 py-3 flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            Session is complete. Open the debrief for final results.
-          </div>
-        )}
-      </div>
+          <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <label className="text-base font-semibold text-foreground">Your Answer</label>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 self-start rounded-lg border border-border bg-background px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                >
+                  <Mic className="h-4 w-4" />
+                  Voice Input
+                </button>
+              </div>
 
-      <div className="text-sm text-muted-foreground">Current status: {humanResult(threadAnswered.at(-1)?.result || null)}</div>
+              <textarea
+                value={answer}
+                onChange={(e) => setAnswer(e.target.value)}
+                placeholder="Type your answer here..."
+                className="min-h-[140px] w-full resize-none rounded-xl border border-border bg-input-background px-4 py-4 text-foreground shadow-inner outline-none transition focus:border-[#1e3a5f]/40 focus:ring-2 focus:ring-[#1e3a5f]"
+                disabled={busy || loading || sessionStatus === "completed" || isAwaitingNext}
+              />
+
+              <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={handleNextQuestion}
+                    disabled={busy || !sessionId || sessionStatus === "completed" || !isAwaitingNext}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <ArrowRight className="h-4 w-4" />
+                    Next Question
+                  </button>
+
+                  <button
+                    onClick={handleSkipPrompt}
+                    disabled={busy || !sessionId || sessionStatus === "completed"}
+                    className="inline-flex items-center gap-2 rounded-lg border border-[#ff6b35]/20 bg-[#ff6b35]/10 px-4 py-2.5 text-sm font-medium text-[#c2410c] transition-colors hover:bg-[#ff6b35]/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <ArrowRight className="h-4 w-4" />
+                    Skip / New Prompt
+                  </button>
+                </div>
+
+                <button
+                  onClick={handleSubmit}
+                  disabled={!answer.trim() || busy || !activePrompt || sessionStatus === "completed" || isAwaitingNext}
+                  className="inline-flex items-center justify-center gap-2 self-end rounded-lg bg-[#ff6b35] px-6 py-2.5 font-medium text-white shadow-sm transition-colors hover:bg-[#ff5722] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Send className="h-4 w-4" />
+                  Submit Answer
+                </button>
+              </div>
+
+              {lastSubmission && (
+                <div className="rounded-xl border border-[#ff6b35]/20 bg-gradient-to-br from-[#ff6b35]/10 to-[#ff6b35]/5 p-4 shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">AI Evaluator Feedback</p>
+                      <p className="mt-1 text-sm leading-6 text-foreground">{lastSubmission.feedback}</p>
+                    </div>
+                    <StatusBadge status={lastSubmission.result} />
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="flex flex-col gap-3 border-b border-border p-6 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-foreground">Session History</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Questions, answers, and evaluator feedback for this thread.</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleExportNotes}
+                className="inline-flex items-center gap-2 self-start rounded-lg border border-border bg-background px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              >
+                <Download className="h-4 w-4" />
+                Export Session Notes
+              </button>
+            </div>
+
+            <div className="max-h-[520px] space-y-4 overflow-y-auto p-6">
+              {activeThreadQuestions.length === 0 && !activePrompt && (
+                <div className="rounded-xl border border-dashed border-border bg-background/60 px-6 py-12 text-center text-sm text-muted-foreground">
+                  Conversation history will appear here as the session progresses.
+                </div>
+              )}
+
+              {activeThreadQuestions.map((row) => (
+                <div key={row.id} className="space-y-3">
+                  <div className="flex justify-start">
+                    <div className="max-w-[80%] rounded-2xl border border-border bg-secondary/40 p-4 shadow-sm">
+                      <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#1e3a5f] text-[10px] font-medium text-white">
+                          Q
+                        </span>
+                        <span>AI Question</span>
+                        <span>{new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                      </div>
+                      <p className="leading-7 text-foreground">{displayQuestionText(row.question_text)}</p>
+                    </div>
+                  </div>
+
+                  {row.user_answer && (
+                    <div className="flex justify-end">
+                      <div className="max-w-[80%] rounded-2xl bg-[#1e3a5f] p-4 text-white shadow-sm">
+                        <div className="mb-2 flex items-center gap-2 text-xs text-white/75">
+                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-[10px] font-medium text-white">
+                            A
+                          </span>
+                          <span>Your Answer</span>
+                        </div>
+                        <p className="leading-7 text-white">{row.user_answer}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {row.ai_feedback && (
+                    <div className="flex justify-start">
+                      <div className="max-w-[80%] rounded-2xl border border-[#ff6b35]/20 bg-gradient-to-br from-[#ff6b35]/10 to-[#ff6b35]/5 p-4 shadow-sm">
+                        <div className="mb-2 flex items-center gap-2 text-xs">
+                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#ff6b35] text-[10px] font-medium text-white">
+                            AI
+                          </span>
+                          <span className="font-medium text-[#c2410c]">AI Feedback</span>
+                          {row.result && <StatusBadge status={row.result} className="ml-1" />}
+                        </div>
+                        <p className="leading-7 text-foreground">{row.ai_feedback}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {activePrompt && !questions.find((row) => row.id === activePrompt.sessionQuestionId) && (
+                <div className="flex justify-start">
+                  <div className="max-w-[80%] rounded-2xl border border-border bg-secondary/40 p-4 shadow-sm">
+                    <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#1e3a5f] text-[10px] font-medium text-white">
+                        Q
+                      </span>
+                      <span>AI Question</span>
+                    </div>
+                    <p className="leading-7 text-foreground">{activePrompt.stem}</p>
+                  </div>
+                </div>
+              )}
+
+              {(loading || busy) && (
+                <div className="flex justify-start">
+                  <div className="rounded-2xl border border-border bg-secondary/40 p-4 shadow-sm">
+                    <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#1e3a5f] text-[10px] font-medium text-white">
+                        Q
+                      </span>
+                      <span>AI is typing</span>
+                    </div>
+                    <div className="flex gap-1">
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:120ms]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:240ms]" />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }

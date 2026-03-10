@@ -243,7 +243,7 @@ export async function POST(req: Request) {
       [sessionId]
     );
     const pending = (pendingRows as unknown[])[0] as PendingQuestionRow | undefined;
-    if (pending) {
+    if (pending && !forceNewBase) {
       await conn.commit();
       return Response.json({
         type: "QUESTION",
@@ -258,6 +258,29 @@ export async function POST(req: Request) {
         },
         meta: { kind: pending.is_probe === 1 ? "probe" : "base" },
       });
+    }
+
+    if (pending && forceNewBase) {
+      await conn.execute(
+        `
+        DELETE FROM session_questions
+        WHERE session_id = ?
+          AND result IS NULL
+        `,
+        [sessionId]
+      );
+
+      await conn.execute(
+        `
+        UPDATE oral_sessions
+        SET probe_count_for_task = 0,
+            last_probe_question = NULL,
+            last_result = NULL
+        WHERE id = ?
+          AND user_id = ?
+        `,
+        [sessionId, userId]
+      );
     }
 
     const recentIds = parseRecentIds(session.recent_question_ids || "[]");
@@ -462,4 +485,3 @@ export async function GET() {
     { status: 405 }
   );
 }
-
