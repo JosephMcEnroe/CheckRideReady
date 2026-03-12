@@ -554,14 +554,14 @@ export default function SessionPage() {
                 onChange={(e) => setAnswer(e.target.value)}
                 placeholder="Type your answer here..."
                 className="min-h-[140px] w-full resize-none rounded-xl border border-border bg-input-background px-4 py-4 text-foreground shadow-inner outline-none transition focus:border-[#1e3a5f]/40 focus:ring-2 focus:ring-[#1e3a5f]"
-                disabled={busy || loading || sessionStatus === "completed" || isAwaitingNext}
+                disabled={busy || loading || isAwaitingNext}
               />
 
               <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-wrap gap-3">
                   <button
                     onClick={handleNextQuestion}
-                    disabled={busy || !sessionId || sessionStatus === "completed" || !isAwaitingNext}
+                    disabled={busy || !sessionId || !isAwaitingNext}
                     className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <ArrowRight className="h-4 w-4" />
@@ -570,7 +570,7 @@ export default function SessionPage() {
 
                   <button
                     onClick={handleSkipPrompt}
-                    disabled={busy || !sessionId || sessionStatus === "completed"}
+                    disabled={busy || !sessionId}
                     className="inline-flex items-center gap-2 rounded-lg border border-[#ff6b35]/20 bg-[#ff6b35]/10 px-4 py-2.5 text-sm font-medium text-[#c2410c] transition-colors hover:bg-[#ff6b35]/15 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <ArrowRight className="h-4 w-4" />
@@ -580,7 +580,7 @@ export default function SessionPage() {
 
                 <button
                   onClick={handleSubmit}
-                  disabled={!answer.trim() || busy || !activePrompt || sessionStatus === "completed" || isAwaitingNext}
+                  disabled={!answer.trim() || busy || !activePrompt || isAwaitingNext}
                   className="inline-flex items-center justify-center gap-2 self-end rounded-lg bg-[#ff6b35] px-6 py-2.5 font-medium text-white shadow-sm transition-colors hover:bg-[#ff5722] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Send className="h-4 w-4" />
