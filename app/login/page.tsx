@@ -115,11 +115,11 @@ function LoginPageContent() {
             ))}
           </div>
 
-          <div className="mt-8 pt-6 border-t border-white/10">
+          {/* <div className="mt-8 pt-6 border-t border-white/10">
             <p className="text-white/60 text-[13px]">Trusted by 500+ student pilots and 50+ flight schools</p>
-          </div>
+          </div> */}
         </div>
-      </div>
+     </div>
 
       <div className="flex-1 flex items-center justify-center px-6 py-6 bg-background">
         <div className="w-full max-w-[380px]">
@@ -224,7 +224,7 @@ function LoginPageContent() {
                 onClick={() => setIsSignUp((prev) => !prev)}
                 className="text-[13px] text-muted-foreground hover:text-foreground transition-colors"
               >
-                {isSignUp ? "Already have an account? Sign in" : "Don&apos;t have an account? Sign up"}
+                {isSignUp ? "Already have an account? Sign in" : "Don't have an account? Sign up"}
               </button>
             </div>
           </div>
