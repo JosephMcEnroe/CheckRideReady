@@ -153,7 +153,7 @@ export default function ShareableDebriefPage() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1e3a5f]">
               <Plane className="h-4 w-4 text-white" />
             </div>
-            <span className="font-semibold text-[#1e3a5f]">CheckRideReady</span>
+            <span className="font-semibold text-[#1e3a5f]">ProCheckride</span>
           </div>
           <Link
             href="/login"
@@ -293,7 +293,7 @@ export default function ShareableDebriefPage() {
         <div className="bg-[#1e3a5f] rounded-xl p-8 text-center space-y-4">
           <h2 className="text-xl font-semibold text-white">Want to practice like this?</h2>
           <p className="text-white/70 text-sm">
-            CheckRideReady simulates your FAA oral exam with an AI examiner.
+            ProCheckride simulates your FAA oral exam with an AI examiner.
           </p>
           <Link
             href="/login"

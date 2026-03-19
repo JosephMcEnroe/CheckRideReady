@@ -13,7 +13,7 @@ export default function HelpPage() {
       >
         <div style={{ fontSize: 18, fontWeight: 900 }}>Help & About</div>
         <div style={{ opacity: 0.88 }}>
-          CheckRideReady simulates oral questioning and provides debrief feedback aligned to pilot training flow.
+          ProCheckride simulates oral questioning and provides debrief feedback aligned to pilot training flow.
         </div>
         <div style={{ opacity: 0.8 }}>Need help? Start from Sessions, open a debrief, and export a PDF for your CFI.</div>
       </div>

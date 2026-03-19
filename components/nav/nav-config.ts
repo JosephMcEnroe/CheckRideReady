@@ -62,7 +62,7 @@ export function pageTitleFromPath(pathname: string) {
   if (/^\/(sessions|results)\/[^/]+\/debrief$/.test(path)) return "Session Debrief";
   if (/^\/(sessions|results)\/[^/]+$/.test(path)) return "Session";
 
-  return "CheckRideReady";
+  return "ProCheckride";
 }
 
 export function quickActionsFromPath(pathname: string): QuickAction[] {

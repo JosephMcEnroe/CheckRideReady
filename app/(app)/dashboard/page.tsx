@@ -108,7 +108,7 @@ export default function DashboardPage() {
         /* ── Get Started (new user) ───────────────────────────────────────── */
         <>
           <div className="space-y-2">
-            <h1 className="text-3xl font-semibold text-foreground">Welcome to CheckRideReady</h1>
+            <h1 className="text-3xl font-semibold text-foreground">Welcome to ProCheckride</h1>
             <p className="text-muted-foreground">How would you like to get started?</p>
           </div>
 

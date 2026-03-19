@@ -72,7 +72,7 @@ export default function InviteAcceptPage() {
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#1e3a5f]">
           <Plane className="h-5 w-5 text-white" />
         </div>
-        <span className="text-xl font-semibold text-[#1e3a5f]">CheckRideReady</span>
+        <span className="text-xl font-semibold text-[#1e3a5f]">ProCheckride</span>
       </div>
 
       {loadingPreview ? (

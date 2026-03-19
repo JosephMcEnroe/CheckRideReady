@@ -95,7 +95,7 @@ export default function SchoolAnalyticsPage() {
     { title: "Total Sessions", value: data ? String(data.metrics.totalSessions) : "—", icon: Calendar },
     { title: "Overall Pass Rate", value: data ? `${data.metrics.passRate}%` : "—", icon: TrendingUp },
     { title: "Avg Score", value: data ? `${data.metrics.avgScore}%` : "—", icon: Award },
-    { title: "Checkride Ready", value: data ? String(data.metrics.checkrideReady) : "—", icon: Users },
+    { title: "Pro Checkride", value: data ? String(data.metrics.checkrideReady) : "—", icon: Users },
   ];
 
   return (

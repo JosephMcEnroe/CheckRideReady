@@ -90,7 +90,7 @@ export function FigmaLayout({ children }: { children: React.ReactNode }) {
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#1e3a5f]">
               <Plane className="h-5 w-5 text-white" />
             </div>
-            <span className="text-xl font-semibold text-[#1e3a5f]">CheckRideReady</span>
+            <span className="text-xl font-semibold text-[#1e3a5f]">ProCheckride</span>
           </div>
           <nav className="flex flex-1 flex-col">
             <NavLinks />
@@ -122,7 +122,7 @@ export function FigmaLayout({ children }: { children: React.ReactNode }) {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1e3a5f]">
             <Plane className="h-4 w-4 text-white" />
           </div>
-          <span className="font-semibold text-[#1e3a5f]">CheckRideReady</span>
+          <span className="font-semibold text-[#1e3a5f]">ProCheckride</span>
         </div>
         <UserDropdown trigger="avatar" />
       </div>
@@ -137,7 +137,7 @@ export function FigmaLayout({ children }: { children: React.ReactNode }) {
           />
           <div className="fixed inset-y-0 left-0 flex w-full max-w-xs flex-col bg-sidebar px-6 py-8">
             <div className="flex items-center justify-between mb-6">
-              <span className="text-xl font-semibold text-[#1e3a5f]">CheckRideReady</span>
+              <span className="text-xl font-semibold text-[#1e3a5f]">ProCheckride</span>
               <button
                 type="button"
                 className="p-2.5 crr-focusable"

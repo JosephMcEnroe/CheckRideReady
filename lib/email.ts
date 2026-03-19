@@ -19,12 +19,12 @@ export async function sendInviteEmail({
 
   try {
     const { error } = await resend.emails.send({
-      from: `CheckRideReady <${process.env.EMAIL_FROM || "onboarding@resend.dev"}>`,
+      from: `ProCheckride <noreply@procheckride.com>`,
       to,
-      subject: `You've been invited to join ${schoolName} on CheckRideReady`,
+      subject: `You've been invited to join ${schoolName} on ProCheckride`,
       html: `
         <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto; padding: 32px;">
-          <h2 style="color: #1e3a5f;">You're invited to CheckRideReady</h2>
+          <h2 style="color: #1e3a5f;">You're invited to ProCheckride</h2>
           <p>${invitedBy} has invited you to join <strong>${schoolName}</strong> as a <strong>${roleLabel}</strong>.</p>
           <p>Click the button below to accept your invitation and get started:</p>
           <a href="${inviteUrl}"

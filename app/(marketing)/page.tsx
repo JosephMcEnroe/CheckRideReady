@@ -110,7 +110,7 @@ export default function LandingPage() {
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1e3a5f]">
                 <Target className="h-5 w-5 text-white" />
               </div>
-              <span className="text-xl font-semibold text-[#1e3a5f]">CheckRideReady</span>
+              <span className="text-xl font-semibold text-[#1e3a5f]">ProCheckride</span>
             </div>
 
             <div className="hidden md:flex items-center gap-8">
@@ -174,10 +174,10 @@ export default function LandingPage() {
             <div className="space-y-8">
               <div className="space-y-4">
                 <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground leading-tight">
-                  Pass Your Checkride with Confidence.
+                  Pass Your Checkride Like a Pro.
                 </h1>
                 <p className="text-xl text-muted-foreground">
-                  AI-powered FAA oral exam simulator built for serious student pilots.
+                  AI-powered FAA oral exam simulator built for serious student pilots and flight schools.
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row gap-4">
@@ -210,7 +210,7 @@ export default function LandingPage() {
                     <div className="h-3 w-3 rounded-full bg-white/30" />
                     <div className="h-3 w-3 rounded-full bg-white/30" />
                   </div>
-                  <div className="flex-1 text-center text-white text-sm font-medium">CheckRideReady Session</div>
+                  <div className="flex-1 text-center text-white text-sm font-medium">ProCheckride Session</div>
                 </div>
                 <div className="p-6 space-y-4 bg-[#f8f9fa]">
                   <div className="bg-white rounded-lg p-4 border border-border shadow-sm">
@@ -361,7 +361,7 @@ export default function LandingPage() {
       <footer className="bg-white border-t border-border py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="border-t border-border pt-8 text-center">
-            <p className="text-sm text-muted-foreground">Copyright 2026 CheckRideReady. All rights reserved.</p>
+            <p className="text-sm text-muted-foreground">Copyright 2026 ProCheckride. All rights reserved.</p>
           </div>
         </div>
       </footer>
