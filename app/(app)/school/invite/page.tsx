@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { readJsonResponse } from "@/lib/http";
 import { Send, RotateCcw } from "lucide-react";
@@ -27,7 +27,7 @@ function formatDate(value: string) {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-export default function SchoolInvitePage() {
+function SchoolInviteContent() {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<"instructor" | "student">(() => {
     const tab = searchParams.get("tab");
@@ -316,5 +316,13 @@ export default function SchoolInvitePage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function SchoolInvitePage() {
+  return (
+    <Suspense>
+      <SchoolInviteContent />
+    </Suspense>
   );
 }
