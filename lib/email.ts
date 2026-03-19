@@ -19,7 +19,7 @@ export async function sendInviteEmail({
 
   try {
     const { error } = await resend.emails.send({
-      from: "CheckRideReady <onboarding@resend.dev>",
+      from: `CheckRideReady <${process.env.EMAIL_FROM || "onboarding@resend.dev"}>`,
       to,
       subject: `You've been invited to join ${schoolName} on CheckRideReady`,
       html: `
