@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { AlertCircle, ArrowLeft, CheckCircle2, Download, TrendingDown, TrendingUp, XCircle } from "lucide-react";
 import { StatusBadge } from "@/components/figma/StatusBadge";
+import { CfiNotesSection } from "@/components/figma/CfiNotesSection";
+import { ShareDebriefButton } from "@/components/figma/ShareDebriefButton";
 import { getSessionResults } from "@/lib/session-results";
 import { computeOverallGrade, PASSING_SCORE_PERCENT } from "@/lib/session-grading";
 import { auth } from "@/auth";
@@ -202,7 +204,8 @@ export default async function DebriefPage({ params }: { params: Promise<{ sessio
         </div>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end gap-3">
+        <ShareDebriefButton sessionId={sessionId} />
         <a
           href={`/api/sessions/${sessionId}/pdf`}
           className="inline-flex items-center gap-2 bg-[#ff6b35] hover:bg-[#ff5722] text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-md"
@@ -287,6 +290,8 @@ export default async function DebriefPage({ params }: { params: Promise<{ sessio
           )}
         </div>
       </div>
+
+      <CfiNotesSection sessionId={sessionId} studentId={userId} />
 
       <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
         <Link

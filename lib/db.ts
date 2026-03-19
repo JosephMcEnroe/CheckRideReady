@@ -15,7 +15,7 @@ export const pool =
   global.__mysqlPool ||
   mysql.createPool({
     uri: requireEnv("MYSQL_URL"),
-    connectionLimit: 2,
+    connectionLimit: 10,
     waitForConnections: true,
     enableKeepAlive: true,
   });

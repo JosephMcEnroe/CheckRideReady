@@ -24,7 +24,19 @@ function LoginPageContent() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      router.replace(callbackUrl);
+      const pendingInviteToken = localStorage.getItem("pending_invite_token");
+      if (pendingInviteToken) {
+        localStorage.removeItem("pending_invite_token");
+        fetch("/api/school/invite/accept", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: pendingInviteToken }),
+        }).finally(() => {
+          router.replace(callbackUrl);
+        });
+      } else {
+        router.replace(callbackUrl);
+      }
     }
   }, [callbackUrl, router, status]);
 

@@ -1,3 +1,9 @@
+// MIGRATION REQUIRED — run this in Railway before deploying:
+// ALTER TABLE oral_sessions ADD COLUMN airport VARCHAR(10) NULL;
+// ALTER TABLE oral_sessions ADD COLUMN aircraft VARCHAR(50) NULL;
+// ALTER TABLE oral_sessions ADD COLUMN focus_areas JSON NULL;
+// ALTER TABLE oral_sessions ADD COLUMN session_weather JSON NULL;
+
 import { pool } from "@/lib/db";
 import { auth } from "@/auth";
 
@@ -24,14 +30,32 @@ export async function POST(req: Request) {
     );
   }
 
+  const airport =
+    typeof body?.airport === "string" && body.airport.trim()
+      ? body.airport.trim().slice(0, 10)
+      : null;
+
+  const aircraft =
+    typeof body?.aircraft === "string" && body.aircraft.trim()
+      ? body.aircraft.trim().slice(0, 50)
+      : null;
+
+  const focusAreas =
+    Array.isArray(body?.focusAreas) && body.focusAreas.length > 0
+      ? JSON.stringify(body.focusAreas.filter((a: unknown) => typeof a === "string"))
+      : null;
+
+  const weatherObj = body?.weather && typeof body.weather === "object" ? body.weather : null;
+  const sessionWeather = weatherObj ? JSON.stringify(weatherObj) : null;
+
   const sessionId = crypto.randomUUID();
 
   await pool.execute(
     `INSERT INTO oral_sessions
-      (id, user_id, mode, status, probe_count_for_task, max_probes_per_task, recent_question_ids)
+      (id, user_id, mode, status, probe_count_for_task, max_probes_per_task, recent_question_ids, airport, aircraft, focus_areas, session_weather)
      VALUES
-      (?, ?, ?, 'active', 0, 2, JSON_ARRAY())`,
-    [sessionId, userId, mode]
+      (?, ?, ?, 'active', 0, 2, JSON_ARRAY(), ?, ?, ?, ?)`,
+    [sessionId, userId, mode, airport, aircraft, focusAreas, sessionWeather]
   );
 
   return Response.json({ sessionId });
@@ -43,4 +67,3 @@ export async function GET() {
     { status: 405 }
   );
 }
-

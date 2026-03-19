@@ -315,18 +315,7 @@ export default function SessionPage() {
       setCurrentPrompt(null);
       await requestNextQuestion(false);
       setLastSubmission(null);
-      const results = await loadResults();
-      const pending = results?.questions?.find((q) => q.result === null);
-      if (pending) {
-        setCurrentPrompt({
-          questionId: pending.question_id || String(pending.id),
-          sessionQuestionId: pending.id,
-          stem: displayQuestionText(pending.question_text),
-          acsTask: pending.acs_task,
-          acsArea: pending.acs_area,
-          kind: pending.is_probe ? "probe" : "base",
-        });
-      }
+      await loadResults();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load next question");
     } finally {
@@ -343,18 +332,7 @@ export default function SessionPage() {
       setCurrentPrompt(null);
       await requestNextQuestion(true);
       setLastSubmission(null);
-      const results = await loadResults();
-      const pending = results?.questions?.find((q) => q.result === null);
-      if (pending) {
-        setCurrentPrompt({
-          questionId: pending.question_id || String(pending.id),
-          sessionQuestionId: pending.id,
-          stem: displayQuestionText(pending.question_text),
-          acsTask: pending.acs_task,
-          acsArea: pending.acs_area,
-          kind: pending.is_probe ? "probe" : "base",
-        });
-      }
+      await loadResults();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to fetch a new prompt");
     } finally {

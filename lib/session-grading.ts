@@ -23,10 +23,6 @@ export function computeScorePercent(counts: SessionCounts): number {
 }
 
 export function computeOverallGrade(counts: SessionCounts): SessionResult {
-  const total =
-    counts.passCount + counts.probeCount + counts.remediateCount + counts.failCount;
-  if (total === 0) return "FAIL";
-
   const score = computeScorePercent(counts);
   if (score < PASSING_SCORE_PERCENT) return "FAIL";
 
