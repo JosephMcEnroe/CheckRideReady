@@ -120,8 +120,8 @@ export function MySQLAdapter(): Adapter {
     async getSessionAndUser() {
       return null;
     },
-    async updateSession(session) {
-      return session;
+    async updateSession(_session) {
+      return null;
     },
     async deleteSession() {},
   };
