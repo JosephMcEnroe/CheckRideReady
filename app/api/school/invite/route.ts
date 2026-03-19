@@ -78,6 +78,7 @@ export async function POST(req: Request) {
 
   const appUrl = process.env.APP_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
   const inviteUrl = `${appUrl}/invite/${token}`;
+  console.log("INVITE URL:", inviteUrl);
 
   try {
     await sendInviteEmail({
