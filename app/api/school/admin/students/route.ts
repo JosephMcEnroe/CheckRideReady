@@ -32,6 +32,7 @@ export async function GET(req: Request) {
   const [rows] = await pool.execute(
     `SELECT
       u.id,
+      sm.id as member_id,
       u.name,
       u.email,
       u.certificate_goal,
