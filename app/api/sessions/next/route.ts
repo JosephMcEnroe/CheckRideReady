@@ -42,31 +42,25 @@ type TxConnection = {
   execute: (sql: string, params?: unknown[]) => Promise<[unknown, unknown]>;
 };
 
-function parseRecentIds(raw: unknown): string[] {
-  if (Array.isArray(raw)) {
-    const seen = new Set<string>();
-    const deduped: string[] = [];
-    for (const item of raw) {
-      if (typeof item !== "string" || !item) continue;
-      if (seen.has(item)) continue;
-      seen.add(item);
-      deduped.push(item);
-    }
-    return deduped;
+function dedupeStringArray(arr: unknown[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of arr) {
+    if (typeof item !== "string" || !item) continue;
+    if (seen.has(item)) continue;
+    seen.add(item);
+    result.push(item);
   }
+  return result;
+}
+
+function parseRecentIds(raw: unknown): string[] {
+  if (Array.isArray(raw)) return dedupeStringArray(raw);
   if (typeof raw !== "string") return [];
   try {
     const parsed = JSON.parse(raw || "[]");
     if (!Array.isArray(parsed)) return [];
-    const seen = new Set<string>();
-    const deduped: string[] = [];
-    for (const item of parsed) {
-      if (typeof item !== "string" || !item) continue;
-      if (seen.has(item)) continue;
-      seen.add(item);
-      deduped.push(item);
-    }
-    return deduped;
+    return dedupeStringArray(parsed);
   } catch {
     return [];
   }
@@ -199,7 +193,8 @@ export async function POST(req: Request) {
       `SELECT id, user_id, mode, status, recent_question_ids,
               probe_count_for_task, max_probes_per_task,
               current_question_id, current_acs_task_code,
-              last_result, last_probe_question
+              last_result, last_probe_question,
+              session_weather, airport, aircraft
        FROM oral_sessions
        WHERE id = ?
          AND user_id = ?

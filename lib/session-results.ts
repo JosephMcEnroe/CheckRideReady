@@ -115,13 +115,15 @@ export async function getSessionResults(
     verdict: q.result === "PASS" ? "RIGHT" : "NEEDS_WORK",
   }));
 
-  const counts = {
-    total: questions.filter((q) => q.result !== null).length,
-    passCount: questions.filter((q) => q.result === "PASS").length,
-    probeCount: questions.filter((q) => q.result === "PROBE").length,
-    remediateCount: questions.filter((q) => q.result === "REMEDIATE").length,
-    failCount: questions.filter((q) => q.result === "FAIL").length,
-  };
+  const counts = { total: 0, passCount: 0, probeCount: 0, remediateCount: 0, failCount: 0 };
+  for (const q of questions) {
+    if (q.result === null) continue;
+    counts.total++;
+    if (q.result === "PASS") counts.passCount++;
+    else if (q.result === "PROBE") counts.probeCount++;
+    else if (q.result === "REMEDIATE") counts.remediateCount++;
+    else if (q.result === "FAIL") counts.failCount++;
+  }
 
   const effectiveOverallGrade =
     session.overall_grade ||

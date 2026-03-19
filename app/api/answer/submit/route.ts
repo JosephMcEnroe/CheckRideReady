@@ -87,7 +87,8 @@ export async function POST(req: Request) {
 
   try {
     const [sRows] = await pool.execute(
-      `SELECT id, user_id, status, current_question_id, current_acs_task_code, probe_count_for_task, max_probes_per_task
+      `SELECT id, user_id, status, current_question_id, current_acs_task_code, probe_count_for_task, max_probes_per_task,
+              session_weather, airport, aircraft
        FROM oral_sessions
        WHERE id = ?
          AND user_id = ?
@@ -184,6 +185,10 @@ export async function POST(req: Request) {
     const escalationLevel = priorFollowUps.length;
     const escalationLimit = Math.max(2, Math.min(3, Number((session as any).max_probes_per_task || 3)));
 
+    const parsedWeather = session.session_weather
+      ? (() => { try { return JSON.parse(session.session_weather); } catch { return null; } })()
+      : null;
+
     const evalResult =
       (await evaluateWithOpenAI({
         questionStem,
@@ -197,6 +202,16 @@ export async function POST(req: Request) {
           feedback: row.ai_feedback,
           result: row.result,
         })),
+        weatherContext: parsedWeather
+          ? {
+              airport: session.airport ?? parsedWeather.airport,
+              aircraft: session.aircraft ?? parsedWeather.aircraft,
+              wind: parsedWeather.wind,
+              visibility: parsedWeather.visibility,
+              ceiling: parsedWeather.ceiling,
+              raw: parsedWeather.raw,
+            }
+          : null,
       })) || defaultEvaluation(acsTaskCode);
 
     let followUpQuestion =
@@ -238,6 +253,21 @@ export async function POST(req: Request) {
 
     const delta = masteryDeltaFromEvaluation(evalResult);
 
+    // Run user_skill upsert and session_questions update in parallel
+    const updateSessionQuestionPromise = sessionQuestionId
+      ? pool.execute(
+          `
+          UPDATE session_questions
+          SET user_answer = ?,
+              ai_feedback = ?,
+              result = ?
+          WHERE id = ?
+            AND session_id = ?
+          `,
+          [answer, evalResult.feedback, evalResult.result, sessionQuestionId, sessionId]
+        )
+      : Promise.resolve(null);
+
     await Promise.all([
       pool.execute(
         `
@@ -259,33 +289,7 @@ export async function POST(req: Request) {
           delta,
         ]
       ),
-      pool.execute(
-        `
-        UPDATE oral_sessions
-        SET last_result = ?,
-            last_feedback = ?,
-            last_probe_question = ?,
-            probe_count_for_task =
-              CASE
-                WHEN ? THEN LEAST(max_probes_per_task, probe_count_for_task + 1)
-                ELSE 0
-              END,
-            current_acs_task_code = ?,
-            current_question_id = ?
-        WHERE id = ?
-          AND user_id = ?
-        `,
-        [
-          evalResult.result,
-          evalResult.feedback,
-          shouldAppendFollowUp ? followUpQuestion : null,
-          shouldAppendFollowUp ? 1 : 0,
-          acsTaskCode,
-          baseQuestionId || session.current_question_id,
-          sessionId,
-          userId,
-        ]
-      ),
+      updateSessionQuestionPromise,
     ]);
 
     if (shouldAppendFollowUp && labeledFollowUp) {
@@ -297,20 +301,6 @@ export async function POST(req: Request) {
           (?, NULL, ?, ?, 1)
         `,
         [sessionId, acsTaskCode, labeledFollowUp]
-      );
-    }
-
-    if (sessionQuestionId) {
-      await pool.execute(
-        `
-        UPDATE session_questions
-        SET user_answer = ?,
-            ai_feedback = ?,
-            result = ?
-        WHERE id = ?
-          AND session_id = ?
-        `,
-        [answer, evalResult.feedback, evalResult.result, sessionQuestionId, sessionId]
       );
     }
 
@@ -342,15 +332,37 @@ export async function POST(req: Request) {
     const overallGrade = computeOverallGrade(counts);
     const overallSummary = buildOverallSummary(counts);
 
+    // Single UPDATE covering all session state fields
     await pool.execute(
       `
       UPDATE oral_sessions
-      SET overall_grade = ?,
+      SET last_result = ?,
+          last_feedback = ?,
+          last_probe_question = ?,
+          probe_count_for_task =
+            CASE
+              WHEN ? THEN LEAST(max_probes_per_task, probe_count_for_task + 1)
+              ELSE 0
+            END,
+          current_acs_task_code = ?,
+          current_question_id = ?,
+          overall_grade = ?,
           overall_summary = ?
       WHERE id = ?
         AND user_id = ?
       `,
-      [overallGrade, overallSummary, sessionId, userId]
+      [
+        evalResult.result,
+        evalResult.feedback,
+        shouldAppendFollowUp ? followUpQuestion : null,
+        shouldAppendFollowUp ? 1 : 0,
+        acsTaskCode,
+        baseQuestionId || session.current_question_id,
+        overallGrade,
+        overallSummary,
+        sessionId,
+        userId,
+      ]
     );
 
     return Response.json({

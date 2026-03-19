@@ -2,26 +2,88 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
-import { ClipboardList, LayoutDashboard, Menu, Plane, Plus, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  BarChart2,
+  Building2,
+  ClipboardList,
+  LayoutDashboard,
+  Menu,
+  Plane,
+  Plus,
+  Settings2,
+  Users,
+  X,
+} from "lucide-react";
 import UserDropdown from "@/components/ui/UserDropdown";
+import { readJsonResponse } from "@/lib/http";
+
+type School = {
+  id: string;
+  name: string;
+  role: string;
+};
 
 export function FigmaLayout({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [school, setSchool] = useState<School | null>(null);
   const pathname = usePathname();
 
-  const navigation = [
+  useEffect(() => {
+    fetch("/api/school/mine")
+      .then((res) => readJsonResponse<{ school?: School | null }>(res))
+      .then((data) => setSchool(data.school ?? null))
+      .catch(() => setSchool(null));
+  }, []);
+
+  const baseNavigation = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Sessions", href: "/sessions", icon: ClipboardList },
   ];
+
+  const schoolNavigation =
+    school?.role === "admin"
+      ? [
+          { name: "School", href: "/school/invite", icon: Building2 },
+          { name: "Students", href: "/school/students", icon: Users },
+          { name: "Analytics", href: "/school/analytics", icon: BarChart2 },
+          { name: "Settings", href: "/school/settings", icon: Settings2 },
+        ]
+      : school?.role === "instructor"
+      ? [{ name: "My Students", href: "/instructor", icon: Users }]
+      : [];
+
+  const navigation = [...baseNavigation, ...schoolNavigation];
 
   const isActive = (path: string) => {
     if (path === "/dashboard") return pathname === "/dashboard";
     return pathname === path || pathname.startsWith(`${path}/`);
   };
 
+  const NavLinks = ({ onNavigate }: { onNavigate?: () => void }) => (
+    <ul role="list" className="flex flex-1 flex-col gap-y-1.5">
+      {navigation.map((item) => (
+        <li key={item.name}>
+          <Link
+            href={item.href}
+            onClick={onNavigate}
+            className={`group flex items-center gap-x-3 rounded-lg px-2 py-2.5 transition-colors ${
+              isActive(item.href)
+                ? "text-[#1e3a5f] font-medium"
+                : "text-sidebar-foreground hover:text-[#1e3a5f]"
+            }`}
+          >
+            <item.icon className="h-[18px] w-[18px] shrink-0" />
+            {item.name}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+
   return (
     <div className="min-h-screen bg-background">
+      {/* Desktop sidebar */}
       <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-64 lg:flex-col">
         <div className="flex grow flex-col gap-y-6 overflow-y-auto border-r border-border bg-sidebar px-6 py-8">
           <div className="flex h-10 shrink-0 items-center gap-3">
@@ -31,23 +93,7 @@ export function FigmaLayout({ children }: { children: React.ReactNode }) {
             <span className="text-xl font-semibold text-[#1e3a5f]">CheckRideReady</span>
           </div>
           <nav className="flex flex-1 flex-col">
-            <ul role="list" className="flex flex-1 flex-col gap-y-1.5">
-              {navigation.map((item) => (
-                <li key={item.name}>
-                  <Link
-                    href={item.href}
-                    className={`group flex items-center gap-x-3 rounded-lg px-2 py-2.5 transition-colors ${
-                      isActive(item.href)
-                        ? "text-[#1e3a5f] font-medium"
-                        : "text-sidebar-foreground hover:text-[#1e3a5f]"
-                    }`}
-                  >
-                    <item.icon className="h-[18px] w-[18px] shrink-0" />
-                    {item.name}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <NavLinks />
             <Link
               href="/sessions/new"
               className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-[#1e3a5f] px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#2d5a8f]"
@@ -62,6 +108,7 @@ export function FigmaLayout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
+      {/* Mobile top bar */}
       <div className="sticky top-0 z-40 flex items-center gap-x-6 bg-sidebar px-4 py-4 shadow-sm sm:px-6 lg:hidden border-b border-border">
         <button
           type="button"
@@ -80,6 +127,7 @@ export function FigmaLayout({ children }: { children: React.ReactNode }) {
         <UserDropdown trigger="avatar" />
       </div>
 
+      {/* Mobile menu */}
       {mobileMenuOpen && (
         <div className="relative z-50 lg:hidden">
           <button
@@ -100,24 +148,7 @@ export function FigmaLayout({ children }: { children: React.ReactNode }) {
               </button>
             </div>
             <nav className="flex-1">
-              <ul role="list" className="flex flex-col gap-y-1.5">
-                {navigation.map((item) => (
-                  <li key={item.name}>
-                    <Link
-                      href={item.href}
-                      onClick={() => setMobileMenuOpen(false)}
-                      className={`group flex items-center gap-x-3 rounded-lg px-2 py-2.5 transition-colors ${
-                        isActive(item.href)
-                          ? "text-[#1e3a5f] font-medium"
-                          : "text-sidebar-foreground hover:text-[#1e3a5f]"
-                      }`}
-                    >
-                      <item.icon className="h-[18px] w-[18px] shrink-0" />
-                      {item.name}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+              <NavLinks onNavigate={() => setMobileMenuOpen(false)} />
               <Link
                 href="/sessions/new"
                 onClick={() => setMobileMenuOpen(false)}
