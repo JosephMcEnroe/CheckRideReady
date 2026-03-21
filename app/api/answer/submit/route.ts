@@ -47,7 +47,11 @@ function buildFallbackFollowUp(
   escalationLevel: number,
   missingPoints: string[]
 ) {
-  const focus = missingPoints[0]?.trim();
+  const focus = missingPoints[0]?.trim()
+    .replace(/^mention of /i, "")
+    .replace(/^lack of /i, "")
+    .replace(/^missing /i, "")
+    .trim();
   if (focus) {
     return `Walk me through ${focus} in this scenario, including your exact decision points and why.`;
   }
@@ -228,7 +232,11 @@ export async function POST(req: Request) {
 
     const mastery = isMastery(evalResult);
     const exhaustedEscalations = !mastery && escalationLevel >= escalationLimit;
-    const shouldAppendFollowUp = !mastery && !exhaustedEscalations && !!followUpQuestion;
+    const shouldAppendFollowUp =
+      evalResult.result !== "PASS" &&
+      !mastery &&
+      !exhaustedEscalations &&
+      !!followUpQuestion;
     const labeledFollowUp = shouldAppendFollowUp ? `Examiner Follow-Up: ${followUpQuestion}` : null;
 
     const attemptId = crypto.randomUUID();
@@ -369,7 +377,7 @@ export async function POST(req: Request) {
       attemptId,
       ...evalResult,
       probe_question: shouldAppendFollowUp ? followUpQuestion : null,
-      continue_thread: shouldAppendFollowUp,
+      continue_thread: evalResult.result !== "PASS" && shouldAppendFollowUp,
       thread_status: mastery ? "mastery" : exhaustedEscalations ? "failed_after_escalation" : "continue",
     });
   } catch (err: any) {

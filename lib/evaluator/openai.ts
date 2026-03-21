@@ -277,10 +277,10 @@ ${followUpsContext}`;
   if (!scoringParsed) return null;
 
   // --- Call 2: Probe question only (PROBE_MODEL / gpt-4.1) ---
-  // Skip entirely when result is PASS and confidence >= 0.80
+  // Skip entirely when result is PASS
   let probe_question: string | null = null;
 
-  if (!(scoringParsed.result === "PASS" && scoringParsed.confidence >= 0.80)) {
+  if (scoringParsed.result !== "PASS") {
     const probeSystemPrompt = wctx ? PROBE_SYSTEM_PROMPT + WEATHER_SYSTEM_ADDENDUM : PROBE_SYSTEM_PROMPT;
 
     const probeUserPrompt = `${weatherBlock}Current examiner prompt: ${input.questionStem}
