@@ -155,8 +155,9 @@ function buildQuestionFilter(
   }
 
   if (recentIds.length > 0) {
-    sql += ` AND id NOT IN (${recentIds.map(() => "?").join(",")})`;
-    params.push(...recentIds);
+    const safeIds = recentIds.slice(-100); // cap at 100 to bound query size
+    sql += ` AND id NOT IN (${safeIds.map(() => "?").join(",")})`;
+    params.push(...safeIds);
   }
 
   sql += ` ORDER BY RAND() LIMIT 1`;

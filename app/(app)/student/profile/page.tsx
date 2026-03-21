@@ -33,6 +33,7 @@ export default function StudentProfilePage() {
   // Step 2 state
   const [airport, setAirport] = useState("");
   const [aircraft, setAircraft] = useState("");
+  const [schoolAirportHint, setSchoolAirportHint] = useState<string | null>(null);
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState<string | null>(null);
@@ -43,22 +44,31 @@ export default function StudentProfilePage() {
 
   const weatherDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // On mount: load saved profile + read localStorage cert goal
+  // On mount: load context + read localStorage cert goal
   useEffect(() => {
-    async function loadProfile() {
+    async function loadContext() {
       try {
-        const res = await fetch("/api/user/profile");
+        const res = await fetch("/api/user/context");
         if (!res.ok) return;
         const data = await readJsonResponse<{
-          home_airport?: string | null;
-          aircraft_type?: string | null;
-          certificate_goal?: string | null;
+          user: {
+            home_airport?: string | null;
+            aircraft_type?: string | null;
+            certificate_goal?: string | null;
+          };
+          school: { icao_identifier?: string | null; name?: string | null } | null;
+          effective_airport: string | null;
+          school_is_source: boolean;
         }>(res);
-        if (data.home_airport) setAirport(data.home_airport);
-        if (data.aircraft_type) setAircraft(data.aircraft_type);
-        if (data.certificate_goal) {
-          const match = goalOptions.find((o) => o.value === data.certificate_goal);
+
+        if (data.effective_airport) setAirport(data.effective_airport);
+        if (data.user.aircraft_type) setAircraft(data.user.aircraft_type);
+        if (data.user.certificate_goal) {
+          const match = goalOptions.find((o) => o.value === data.user.certificate_goal);
           if (match) setCertificateGoal(match.value);
+        }
+        if (data.school_is_source && data.school?.icao_identifier && data.school?.name) {
+          setSchoolAirportHint(data.school.name);
         }
       } catch {
         // silently fail
@@ -72,7 +82,7 @@ export default function StudentProfilePage() {
       if (matchByFigma) setCertificateGoal(matchByFigma.value);
     }
 
-    loadProfile();
+    loadContext();
   }, []);
 
   // Weather fetch when airport changes (step 2)
@@ -215,6 +225,11 @@ export default function StudentProfilePage() {
               placeholder="e.g. KROC"
               className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
             />
+            {schoolAirportHint && (
+              <p className="text-xs text-muted-foreground">
+                Using your flight school&apos;s location ({schoolAirportHint}). You can change this.
+              </p>
+            )}
           </div>
 
           {/* Weather preview */}

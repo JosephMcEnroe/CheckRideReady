@@ -105,35 +105,6 @@ function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
 }
 
-function parseEvaluation(jsonText: string): OpenAIEvaluation | null {
-  try {
-    const parsed = JSON.parse(jsonText) as Record<string, unknown>;
-    if (!isResult(parsed.result)) return null;
-    if (typeof parsed.feedback !== "string") return null;
-    if (!Array.isArray(parsed.missing_points)) return null;
-    if (!parsed.missing_points.every((x) => typeof x === "string")) return null;
-    if (!(typeof parsed.probe_question === "string" || parsed.probe_question === null)) return null;
-    if (typeof parsed.acs_task_code !== "string") return null;
-
-    const confidenceRaw =
-      typeof parsed.confidence === "number" ? parsed.confidence : Number(parsed.confidence);
-
-    return {
-      result: parsed.result,
-      confidence: clamp01(confidenceRaw),
-      feedback: parsed.feedback.trim(),
-      missing_points: parsed.missing_points.map((x) => x.trim()).filter(Boolean),
-      probe_question:
-        typeof parsed.probe_question === "string" && parsed.probe_question.trim()
-          ? parsed.probe_question.trim()
-          : null,
-      acs_task_code: parsed.acs_task_code.trim(),
-    };
-  } catch {
-    return null;
-  }
-}
-
 // Uses the singleton OpenAI SDK client so the underlying HTTP/2 connection is reused
 // across requests (avoids per-call TCP+TLS handshake overhead).
 async function runOpenAIWithModel(
@@ -359,5 +330,3 @@ function parseProbeResult(jsonText: string): string | null {
   }
 }
 
-// Keep parseEvaluation exported for any external callers that may use it
-export { parseEvaluation };

@@ -49,17 +49,29 @@ export async function GET() {
 
   const students = studentRows as any[];
 
-  // Attach weakest ACS area per student
-  const enriched = await Promise.all(
-    students.map(async (s) => {
-      const [skillRows] = await pool.execute(
-        `SELECT acs_task_code FROM user_skill WHERE user_id = ? ORDER BY mastery ASC LIMIT 1`,
-        [s.id]
-      );
-      const weakest = (skillRows as any[])[0]?.acs_task_code ?? null;
-      return { ...s, weakest_area: weakest };
-    })
+  if (students.length === 0) {
+    return Response.json({ students: [] });
+  }
+
+  // Single query for all students' weakest ACS areas — avoids N+1
+  const studentIds = students.map((s) => s.id);
+  const [weakestRows] = await pool.execute(
+    `SELECT us1.user_id, us1.acs_task_code
+     FROM user_skill us1
+     WHERE us1.user_id IN (${studentIds.map(() => "?").join(",")})
+       AND us1.mastery = (
+         SELECT MIN(us2.mastery) FROM user_skill us2 WHERE us2.user_id = us1.user_id
+       )`,
+    studentIds
   );
+  const weakestMap = new Map(
+    (weakestRows as any[]).map((r) => [r.user_id, r.acs_task_code])
+  );
+
+  const enriched = students.map((s) => ({
+    ...s,
+    weakest_area: weakestMap.get(s.id) ?? null,
+  }));
 
   return Response.json({ students: enriched });
 }

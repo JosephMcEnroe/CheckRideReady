@@ -43,7 +43,7 @@ export async function sendInviteEmail({
 
     return { success: true };
   } catch (err) {
-    console.log("Email send exception:", err);
-    return null;
+    console.error("Email send exception:", err);
+    return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }

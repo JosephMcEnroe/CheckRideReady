@@ -11,7 +11,7 @@ function getScorePercent(questions: Array<{ result: string | null }>) {
 }
 
 export async function GET(
-  _req: Request,
+  _: Request,
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params;
