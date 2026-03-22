@@ -120,9 +120,9 @@ export default function LandingPage() {
               <a href="#how-it-works" className="text-sm text-foreground hover:text-[#1e3a5f] transition-colors">
                 How It Works
               </a>
-              <a href="#pricing" className="text-sm text-foreground hover:text-[#1e3a5f] transition-colors">
+              {/* <a href="#pricing" className="text-sm text-foreground hover:text-[#1e3a5f] transition-colors">
                 Pricing
-              </a>
+              </a> */}
               <Link href="/login" className="text-sm text-foreground hover:text-[#1e3a5f] transition-colors">
                 Login
               </Link>
@@ -147,9 +147,9 @@ export default function LandingPage() {
               <a href="#how-it-works" className="block text-sm text-foreground" onClick={() => setMobileMenuOpen(false)}>
                 How It Works
               </a>
-              <a href="#pricing" className="block text-sm text-foreground" onClick={() => setMobileMenuOpen(false)}>
+              {/* <a href="#pricing" className="block text-sm text-foreground" onClick={() => setMobileMenuOpen(false)}>
                 Pricing
-              </a>
+              </a> */}
               <Link href="/login" className="block text-sm text-foreground" onClick={() => setMobileMenuOpen(false)}>
                 Login
               </Link>
@@ -304,6 +304,7 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* PRICING SECTION - temporarily hidden
       <section id="pricing" className="py-20 lg:py-32">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-16">
@@ -357,6 +358,7 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+      */}
 
       <footer className="bg-white border-t border-border py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

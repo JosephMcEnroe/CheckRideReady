@@ -96,6 +96,50 @@ const PROBE_SCHEMA = {
   },
 };
 
+const RED_FLAG_PHRASES = [
+  "doesn't matter",
+  "doesnt matter",
+  "always fine",
+  "never check",
+  "skip checklist",
+  "dont check",
+  "don't need to",
+  "not required",
+];
+
+const RE_REGULATORY = /\b(far|14 cfr|91\.\d+|aim|acs|61\.\d+)\b/i;
+const RE_PROCESS = /\b(first|then|next|after|before|step|procedure)\b/i;
+const RE_SAFETY = /\b(risk|hazard|safe|safety|emergency|minimum)\b/i;
+const RE_DEFINITION = /\b(is defined|means|refers to|known as)\b/i;
+
+export function preEvaluate(
+  answer: string
+): { skip: false } | { skip: true; result: EvaluationResultCode; reason: string } {
+  const wordCount = answer.trim().split(/\s+/).length;
+
+  if (wordCount < 15) {
+    return { skip: true, result: "REMEDIATE", reason: "Answer too short" };
+  }
+
+  const lower = answer.toLowerCase();
+  for (const phrase of RED_FLAG_PHRASES) {
+    if (lower.includes(phrase)) {
+      return { skip: true, result: "FAIL", reason: "Unsafe reasoning detected" };
+    }
+  }
+
+  if (wordCount > 15) {
+    const signals = [RE_REGULATORY, RE_PROCESS, RE_SAFETY, RE_DEFINITION].filter((re) =>
+      re.test(answer)
+    ).length;
+    if (signals >= 2) {
+      return { skip: false };
+    }
+  }
+
+  return { skip: false };
+}
+
 function isResult(v: unknown): v is EvaluationResultCode {
   return v === "PASS" || v === "PROBE" || v === "REMEDIATE" || v === "FAIL";
 }
@@ -181,6 +225,21 @@ function buildThreadContext(
 }
 
 export async function evaluateWithOpenAI(input: EvaluateInput): Promise<OpenAIEvaluation | null> {
+  const pre = preEvaluate(input.studentAnswer);
+  if (pre.skip) {
+    return {
+      result: pre.result,
+      confidence: 0.9,
+      feedback:
+        pre.result === "FAIL"
+          ? "Unsafe or incorrect reasoning detected. Review procedures and regulatory requirements before continuing."
+          : "Your answer needs more depth. Provide a complete explanation including regulatory basis, procedures, and safety considerations.",
+      missing_points: ["Complete explanation required"],
+      probe_question: null,
+      acs_task_code: input.acsTaskCode,
+    };
+  }
+
   const priorFollowUps = (input.priorFollowUps || []).filter(Boolean).slice(-3);
   const priorThread = (input.priorThread || []).slice(-3);
   const escalationLevel = Number.isFinite(input.escalationLevel) ? Number(input.escalationLevel) : 0;
@@ -216,7 +275,7 @@ ${followUpsContext}`;
       { role: "user", content: baseUserPrompt },
     ],
     EVAL_MODEL,
-    400,
+    300,
     SCORING_SCHEMA,
     "oral_scoring"
   );
@@ -238,7 +297,7 @@ ${followUpsContext}`;
         },
       ],
       EVAL_MODEL,
-      400,
+      300,
       SCORING_SCHEMA,
       "oral_scoring"
     );
@@ -271,7 +330,7 @@ If mastery is clearly demonstrated, return null.`;
         { role: "user", content: probeUserPrompt },
       ],
       PROBE_MODEL,
-      200,
+      150,
       PROBE_SCHEMA,
       "oral_probe"
     );
