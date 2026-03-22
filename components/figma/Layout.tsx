@@ -12,6 +12,7 @@ import {
   Plane,
   Plus,
   Settings2,
+  TrendingUp,
   Users,
   X,
 } from "lucide-react";
@@ -53,7 +54,12 @@ export function FigmaLayout({ children }: { children: React.ReactNode }) {
       ? [{ name: "My Students", href: "/instructor", icon: Users }]
       : [];
 
-  const navigation = [...baseNavigation, ...schoolNavigation];
+  const studentNavigation =
+    school === null || school?.role === "student"
+      ? [{ name: "My Progress", href: "/progress", icon: TrendingUp }]
+      : [];
+
+  const navigation = [...baseNavigation, ...studentNavigation, ...schoolNavigation];
 
   const isActive = (path: string) => {
     if (path === "/dashboard") return pathname === "/dashboard";
