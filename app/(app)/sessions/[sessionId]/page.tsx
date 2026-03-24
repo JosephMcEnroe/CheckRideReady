@@ -44,6 +44,7 @@ type NextQuestionResponse =
       };
       meta?: {
         kind?: "base" | "probe";
+        is_scenario?: boolean;
       };
     }
   | {
@@ -72,6 +73,7 @@ type PromptState = {
   acsTask: string | null;
   acsArea: string | null;
   kind: "base" | "probe";
+  isScenario?: boolean;
 };
 
 function shortId(id: string) {
@@ -203,6 +205,7 @@ export default function SessionPage() {
       acsTask: json.question.acs_task_code,
       acsArea: json.question.acs_area,
       kind: json.meta?.kind === "probe" ? "probe" : "base",
+      isScenario: json.meta?.is_scenario === true,
     } satisfies PromptState;
 
     setCurrentPrompt(nextPrompt);
@@ -491,7 +494,14 @@ export default function SessionPage() {
                     Q
                   </span>
                   <div>
-                    <p className="font-medium uppercase tracking-[0.18em] text-white/70">Current Question</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium uppercase tracking-[0.18em] text-white/70">Current Question</p>
+                      {activePrompt?.isScenario && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#ff6b35]/20 border border-[#ff6b35]/30 text-[#ff6b35] text-xs font-medium">
+                          ⛅ Live Scenario
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-white/60">
                       {activePrompt?.kind === "probe" ? "Examiner Follow-Up" : "Primary Prompt"}
                     </p>
