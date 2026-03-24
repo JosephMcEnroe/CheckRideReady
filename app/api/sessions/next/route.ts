@@ -8,6 +8,23 @@ import { generateScenarioQuestion } from "@/lib/scenario-generator";
 
 const SCENARIO_RATIO = parseFloat(process.env.SCENARIO_QUESTION_RATIO || "0.4");
 
+function interpolateQuestion(
+  stem: string,
+  context: {
+    airport?: string | null;
+    aircraft?: string | null;
+  }
+): string {
+  const airport = context.airport || "your departure airport";
+  const aircraft = context.aircraft || "your aircraft";
+  const runway = "the active runway";
+
+  return stem
+    .replace(/\{airport\}/g, airport)
+    .replace(/\{aircraft\}/g, aircraft)
+    .replace(/\{runway\}/g, runway);
+}
+
 type Mode = "PPL" | "IR" | "CPL";
 
 type SessionRow = {
@@ -514,11 +531,16 @@ export async function POST(req: Request) {
       [question.id, question.acs_task_code, JSON.stringify(updatedRecent), sessionId, userId]
     );
 
+    const interpolatedStem = interpolateQuestion(question.stem, {
+      airport: session.airport,
+      aircraft: session.aircraft,
+    });
+
     const sessionQuestionId = await insertSessionQuestion(conn, {
       sessionId,
       questionId: question.id,
       acsTask: question.acs_task_code ?? null,
-      questionText: question.stem,
+      questionText: interpolatedStem,
       isProbe: false,
     });
 
@@ -528,7 +550,7 @@ export async function POST(req: Request) {
       question: {
         id: question.id,
         session_question_id: sessionQuestionId,
-        stem: question.stem,
+        stem: interpolatedStem,
         acs_task_code: question.acs_task_code,
         acs_area: question.acs_area,
       },
