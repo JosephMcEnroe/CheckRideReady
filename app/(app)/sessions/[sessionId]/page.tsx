@@ -114,7 +114,8 @@ export default function SessionPage() {
       acsTask: pending.acs_task,
       acsArea: pending.acs_area,
       kind: pending.is_probe ? ("probe" as const) : ("base" as const),
-    };
+      isScenario: undefined,
+    } satisfies PromptState;
   }, [questions]);
 
   const activePrompt = currentPrompt || pendingPromptFromHistory;
