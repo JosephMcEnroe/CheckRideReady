@@ -32,7 +32,7 @@ export default function Sidebar({ collapsed }: SidebarProps) {
     >
       <div style={{ padding: collapsed ? "6px 4px 18px 4px" : "6px 8px 18px 8px" }}>
         <div style={{ color: "#f5f7fb", fontWeight: 900, letterSpacing: 0.4, fontSize: collapsed ? 14 : 16 }}>
-          {collapsed ? "CRR" : "CheckRideReady"}
+          {collapsed ? "CRR" : "ProCheckride"}
         </div>
         {!collapsed && <div style={{ color: "#90a0b7", marginTop: 2, fontSize: 12 }}>Pilot Oral Prep</div>}
       </div>

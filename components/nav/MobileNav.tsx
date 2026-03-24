@@ -57,7 +57,7 @@ export default function MobileNav({ open, onClose }: MobileNavProps) {
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <div style={{ color: "#f5f7fb", fontWeight: 900, fontSize: 16 }}>CheckRideReady</div>
+            <div style={{ color: "#f5f7fb", fontWeight: 900, fontSize: 16 }}>ProCheckride</div>
             <div style={{ color: "#90a0b7", fontSize: 12 }}>Pilot Oral Prep</div>
           </div>
           <button

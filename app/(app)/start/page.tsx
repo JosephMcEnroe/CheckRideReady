@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { readJsonResponse } from "@/lib/http";
 import { WeatherContextCard } from "@/components/figma/WeatherContextCard";
-import { Pencil, Check, AlertTriangle } from "lucide-react";
+import { Pencil, Check, AlertTriangle, Building2 } from "lucide-react";
 
 type Certificate = "Private" | "Instrument" | "Commercial";
 
@@ -67,6 +67,8 @@ export default function StartPage() {
   const [airport, setAirport] = useState("");
   const [aircraft, setAircraft] = useState("");
   const [editingAirport, setEditingAirport] = useState(false);
+  const [airportSource, setAirportSource] = useState<"school" | "personal" | "custom" | null>(null);
+  const [schoolName, setSchoolName] = useState<string | null>(null);
   const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
   const [profileMissing, setProfileMissing] = useState(false);
 
@@ -79,32 +81,43 @@ export default function StartPage() {
 
   const weatherDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load profile on mount
+  // Load context on mount
   useEffect(() => {
-    async function loadProfile() {
+    async function loadContext() {
       try {
-        const res = await fetch("/api/user/profile");
+        const res = await fetch("/api/user/context");
         if (!res.ok) return;
         const data = await readJsonResponse<{
-          home_airport?: string | null;
-          aircraft_type?: string | null;
-          certificate_goal?: string | null;
+          user: {
+            home_airport?: string | null;
+            aircraft_type?: string | null;
+            certificate_goal?: string | null;
+          };
+          school: { icao_identifier?: string | null; name?: string | null; role?: string | null } | null;
+          effective_airport: string | null;
+          school_is_source: boolean;
         }>(res);
 
-        if (!data.home_airport && !data.aircraft_type && !data.certificate_goal) {
+        if (!data.user.home_airport && !data.user.aircraft_type && !data.user.certificate_goal && !data.school) {
           setProfileMissing(true);
         }
 
-        if (data.home_airport) setAirport(data.home_airport);
-        if (data.aircraft_type) setAircraft(data.aircraft_type);
-        if (data.certificate_goal && goalToCert[data.certificate_goal]) {
-          setCertificate(goalToCert[data.certificate_goal]);
+        if (data.effective_airport) {
+          setAirport(data.effective_airport);
+          setAirportSource(data.school_is_source ? "school" : "personal");
+        }
+        if (data.school_is_source && data.school?.name) {
+          setSchoolName(data.school.name);
+        }
+        if (data.user.aircraft_type) setAircraft(data.user.aircraft_type);
+        if (data.user.certificate_goal && goalToCert[data.user.certificate_goal]) {
+          setCertificate(goalToCert[data.user.certificate_goal]);
         }
       } catch {
         // silently fail
       }
     }
-    loadProfile();
+    loadContext();
   }, []);
 
   // Fetch weather when airport changes
@@ -157,6 +170,7 @@ export default function StartPage() {
           mode: modeMap[certificate],
           airport: airport || null,
           aircraft: aircraft || null,
+          airport_source: airportSource ?? "custom",
           focusAreas: selectedAreas,
           weather: weatherData
             ? {
@@ -231,20 +245,46 @@ export default function StartPage() {
         <div className="rounded-xl border border-border bg-card shadow-sm p-5 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-foreground">Airport</h2>
-            <button
-              onClick={() => setEditingAirport((v) => !v)}
-              className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
-            >
-              {editingAirport ? <Check className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
-            </button>
+            {airportSource !== "school" && (
+              <button
+                onClick={() => setEditingAirport((v) => !v)}
+                className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+              >
+                {editingAirport ? <Check className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
+              </button>
+            )}
           </div>
 
-          {editingAirport ? (
+          {airportSource === "school" ? (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-foreground">{airport}</p>
+                <button
+                  onClick={() => { setAirportSource("custom"); setEditingAirport(true); }}
+                  className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                <span className="inline-flex items-center gap-1">
+                  <Building2 className="h-3 w-3" />
+                  Defaulting to {schoolName} location
+                </span>
+                <button
+                  onClick={() => { setAirportSource("custom"); setEditingAirport(true); }}
+                  className="text-[#ff6b35] hover:underline"
+                >
+                  Change
+                </button>
+              </div>
+            </div>
+          ) : editingAirport ? (
             <input
               type="text"
               maxLength={4}
               value={airport}
-              onChange={(e) => setAirport(e.target.value.toUpperCase())}
+              onChange={(e) => { setAirport(e.target.value.toUpperCase()); setAirportSource("custom"); }}
               placeholder="ICAO code e.g. KROC"
               autoFocus
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"

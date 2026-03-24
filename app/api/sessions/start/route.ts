@@ -3,6 +3,7 @@
 // ALTER TABLE oral_sessions ADD COLUMN aircraft VARCHAR(50) NULL;
 // ALTER TABLE oral_sessions ADD COLUMN focus_areas JSON NULL;
 // ALTER TABLE oral_sessions ADD COLUMN session_weather JSON NULL;
+// MIGRATION: ALTER TABLE oral_sessions ADD COLUMN airport_source ENUM('school','personal','custom') NULL;
 
 import { pool } from "@/lib/db";
 import { auth } from "@/auth";
@@ -48,14 +49,20 @@ export async function POST(req: Request) {
   const weatherObj = body?.weather && typeof body.weather === "object" ? body.weather : null;
   const sessionWeather = weatherObj ? JSON.stringify(weatherObj) : null;
 
+  const airportSourceRaw = body?.airport_source;
+  const airportSource =
+    airportSourceRaw === "school" || airportSourceRaw === "personal" || airportSourceRaw === "custom"
+      ? airportSourceRaw
+      : null;
+
   const sessionId = crypto.randomUUID();
 
   await pool.execute(
     `INSERT INTO oral_sessions
-      (id, user_id, mode, status, probe_count_for_task, max_probes_per_task, recent_question_ids, airport, aircraft, focus_areas, session_weather)
+      (id, user_id, mode, status, probe_count_for_task, max_probes_per_task, recent_question_ids, airport, aircraft, focus_areas, session_weather, airport_source)
      VALUES
-      (?, ?, ?, 'active', 0, 2, JSON_ARRAY(), ?, ?, ?, ?)`,
-    [sessionId, userId, mode, airport, aircraft, focusAreas, sessionWeather]
+      (?, ?, ?, 'active', 0, 2, JSON_ARRAY(), ?, ?, ?, ?, ?)`,
+    [sessionId, userId, mode, airport, aircraft, focusAreas, sessionWeather, airportSource]
   );
 
   return Response.json({ sessionId });

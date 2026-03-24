@@ -47,7 +47,11 @@ function buildFallbackFollowUp(
   escalationLevel: number,
   missingPoints: string[]
 ) {
-  const focus = missingPoints[0]?.trim();
+  const focus = missingPoints[0]?.trim()
+    .replace(/^mention of /i, "")
+    .replace(/^lack of /i, "")
+    .replace(/^missing /i, "")
+    .trim();
   if (focus) {
     return `Walk me through ${focus} in this scenario, including your exact decision points and why.`;
   }
@@ -88,7 +92,7 @@ export async function POST(req: Request) {
   try {
     const [sRows] = await pool.execute(
       `SELECT id, user_id, status, current_question_id, current_acs_task_code, probe_count_for_task, max_probes_per_task,
-              session_weather, airport, aircraft
+              session_weather, airport, aircraft, airport_source
        FROM oral_sessions
        WHERE id = ?
          AND user_id = ?
@@ -186,7 +190,31 @@ export async function POST(req: Request) {
     const escalationLimit = Math.max(2, Math.min(3, Number((session as any).max_probes_per_task || 3)));
 
     const parsedWeather = session.session_weather
-      ? (() => { try { return JSON.parse(session.session_weather); } catch { return null; } })()
+      ? (() => {
+          try { return JSON.parse(session.session_weather); }
+          catch (e) { console.error(`Failed to parse session_weather for session ${sessionId}:`, e); return null; }
+        })()
+      : null;
+
+    const airportSource = session.airport_source as string | null;
+    const schoolNote =
+      airportSource === "school" && session.airport
+        ? `\nNote: This student is training at ${session.airport} which is their flight school's primary training airport.`
+        : "";
+
+    const resolvedAirport = session.airport ?? parsedWeather?.airport ?? null;
+
+    const weatherContext = parsedWeather
+      ? {
+          airport: resolvedAirport,
+          aircraft: session.aircraft ?? parsedWeather.aircraft,
+          wind: parsedWeather.wind,
+          visibility: parsedWeather.visibility,
+          ceiling: parsedWeather.ceiling,
+          raw: parsedWeather.raw ? parsedWeather.raw + schoolNote : schoolNote || undefined,
+        }
+      : schoolNote
+      ? { airport: resolvedAirport, aircraft: session.aircraft ?? null, raw: schoolNote }
       : null;
 
     const evalResult =
@@ -202,16 +230,7 @@ export async function POST(req: Request) {
           feedback: row.ai_feedback,
           result: row.result,
         })),
-        weatherContext: parsedWeather
-          ? {
-              airport: session.airport ?? parsedWeather.airport,
-              aircraft: session.aircraft ?? parsedWeather.aircraft,
-              wind: parsedWeather.wind,
-              visibility: parsedWeather.visibility,
-              ceiling: parsedWeather.ceiling,
-              raw: parsedWeather.raw,
-            }
-          : null,
+        weatherContext,
       })) || defaultEvaluation(acsTaskCode);
 
     let followUpQuestion =
@@ -219,16 +238,21 @@ export async function POST(req: Request) {
         ? evalResult.probe_question.trim()
         : buildFallbackFollowUp(questionStem, escalationLevel + 1, evalResult.missing_points);
 
-    if (
-      followUpQuestion &&
-      priorFollowUps.some((q) => normalizeText(q) === normalizeText(followUpQuestion))
-    ) {
-      followUpQuestion = buildFallbackFollowUp(questionStem, escalationLevel + 1, evalResult.missing_points);
+    if (followUpQuestion) {
+      const normalizedNew = normalizeText(followUpQuestion);
+      const normalizedPrior = priorFollowUps.map(normalizeText);
+      if (normalizedPrior.includes(normalizedNew)) {
+        followUpQuestion = buildFallbackFollowUp(questionStem, escalationLevel + 1, evalResult.missing_points);
+      }
     }
 
     const mastery = isMastery(evalResult);
     const exhaustedEscalations = !mastery && escalationLevel >= escalationLimit;
-    const shouldAppendFollowUp = !mastery && !exhaustedEscalations && !!followUpQuestion;
+    const shouldAppendFollowUp =
+      evalResult.result !== "PASS" &&
+      !mastery &&
+      !exhaustedEscalations &&
+      !!followUpQuestion;
     const labeledFollowUp = shouldAppendFollowUp ? `Examiner Follow-Up: ${followUpQuestion}` : null;
 
     const attemptId = crypto.randomUUID();
@@ -369,7 +393,7 @@ export async function POST(req: Request) {
       attemptId,
       ...evalResult,
       probe_question: shouldAppendFollowUp ? followUpQuestion : null,
-      continue_thread: shouldAppendFollowUp,
+      continue_thread: evalResult.result !== "PASS" && shouldAppendFollowUp,
       thread_status: mastery ? "mastery" : exhaustedEscalations ? "failed_after_escalation" : "continue",
     });
   } catch (err: any) {

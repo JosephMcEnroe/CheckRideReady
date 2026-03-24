@@ -105,7 +105,7 @@ function LoginPageContent() {
             <div className="bg-accent rounded-xl p-2.5">
               <Plane className="w-6 h-6 text-white" />
             </div>
-            <span className="text-white text-xl font-semibold">CheckRideReady</span>
+            <span className="text-white text-xl font-semibold">ProCheckride</span>
           </div>
 
           <h1 className="text-white text-[32px] font-bold mb-3 leading-tight">
@@ -139,7 +139,7 @@ function LoginPageContent() {
             <div className="bg-accent rounded-xl p-2.5">
               <Plane className="w-6 h-6 text-white" />
             </div>
-            <span className="text-primary text-xl font-semibold">CheckRideReady</span>
+            <span className="text-primary text-xl font-semibold">ProCheckride</span>
           </div>
 
           <div className="bg-card rounded-xl border border-border px-7 py-6 shadow-lg">

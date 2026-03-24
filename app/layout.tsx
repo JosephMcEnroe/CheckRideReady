@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CheckRideReady",
-  description: "Oral exam prep and session debriefing for pilot training",
+  title: "ProCheckride",
+  description: "AI-powered oral exam prep for pilots. Pass your checkride like a pro.",
   icons: {
     icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
     shortcut: ["/icon.svg"],

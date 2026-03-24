@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { ArrowRight, Download, FileText, Mic, Send } from "lucide-react";
+import { ArrowRight, Download, FileText, Send } from "lucide-react";
 import { StatusBadge } from "@/components/figma/StatusBadge";
+import { VoiceInput } from "@/components/figma/VoiceInput";
 import { readJsonResponse } from "@/lib/http";
 
 type ResultCode = "PASS" | "PROBE" | "REMEDIATE" | "FAIL";
@@ -43,6 +44,7 @@ type NextQuestionResponse =
       };
       meta?: {
         kind?: "base" | "probe";
+        is_scenario?: boolean;
       };
     }
   | {
@@ -71,6 +73,7 @@ type PromptState = {
   acsTask: string | null;
   acsArea: string | null;
   kind: "base" | "probe";
+  isScenario?: boolean;
 };
 
 function shortId(id: string) {
@@ -202,6 +205,7 @@ export default function SessionPage() {
       acsTask: json.question.acs_task_code,
       acsArea: json.question.acs_area,
       kind: json.meta?.kind === "probe" ? "probe" : "base",
+      isScenario: json.meta?.is_scenario === true,
     } satisfies PromptState;
 
     setCurrentPrompt(nextPrompt);
@@ -512,7 +516,14 @@ export default function SessionPage() {
                     Q
                   </span>
                   <div>
-                    <p className="font-medium uppercase tracking-[0.18em] text-white/70">Current Question</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium uppercase tracking-[0.18em] text-white/70">Current Question</p>
+                      {activePrompt?.isScenario && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#ff6b35]/20 border border-[#ff6b35]/30 text-[#ff6b35] text-xs font-medium">
+                          ⛅ Live Scenario
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-white/60">
                       {activePrompt?.kind === "probe" ? "Examiner Follow-Up" : "Primary Prompt"}
                     </p>
@@ -540,13 +551,12 @@ export default function SessionPage() {
             <div className="space-y-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <label className="text-base font-semibold text-foreground">Your Answer</label>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-2 self-start rounded-lg border border-border bg-background px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                >
-                  <Mic className="h-4 w-4" />
-                  Voice Input
-                </button>
+                <VoiceInput
+                  onTranscript={(text) => {
+                    setAnswer((prev) => (prev ? prev + " " + text : text));
+                  }}
+                  disabled={busy || loading || isAwaitingNext}
+                />
               </div>
 
               <textarea

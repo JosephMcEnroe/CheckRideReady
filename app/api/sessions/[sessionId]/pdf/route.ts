@@ -150,7 +150,7 @@ export async function GET(
     // - Every page gets a consistent header and footer for a professional printable report.
     function addPage(): PageState {
       const page = pdf.addPage([pageWidth, pageHeight]);
-      page.drawText("CheckRideReady | Oral Exam Report", {
+      page.drawText("ProCheckride | Oral Exam Report", {
         x: marginX,
         y: headerY,
         size: 10,
@@ -263,7 +263,7 @@ export async function GET(
       state.y -= 12;
     }
 
-    drawTextLine("CheckRideReady Oral Exam Report", {
+    drawTextLine("ProCheckride Oral Exam Report", {
       font: fontBold,
       size: 20,
       color: rgb(0.08, 0.11, 0.18),
@@ -380,7 +380,7 @@ export async function GET(
 
     const bytes = await pdf.save();
     const body = Buffer.from(bytes);
-    const filename = `CheckRideReady-Session-${sessionId}.pdf`;
+    const filename = `ProCheckride-Session-${sessionId}.pdf`;
 
     return new Response(body, {
       status: 200,

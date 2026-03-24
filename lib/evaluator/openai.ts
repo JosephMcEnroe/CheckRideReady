@@ -33,33 +33,112 @@ type EvaluateInput = {
   } | null;
 };
 
-const MODEL = process.env.OPENAI_EVAL_MODEL || "gpt-4.1";
+const EVAL_MODEL = process.env.OPENAI_EVAL_MODEL || "gpt-4.1-nano";
+const PROBE_MODEL = process.env.OPENAI_MODEL || "gpt-4.1";
 
 const WEATHER_SYSTEM_ADDENDUM = `\nIf weather context is provided below, reference today's actual conditions naturally in your questions where relevant. Ask scenario-based questions that a real DPE would ask given these specific conditions.`;
 
-// JSON schema instructions removed — structured output enforces the schema automatically.
-const SYSTEM_PROMPT = `You are an FAA DPE-style oral examiner for an interactive oral exam thread.
-Evaluate the current student answer against the current examiner prompt and ACS task.
-Analyze strengths, weak areas, missed details, shallow reasoning, risk areas, regulatory gaps, and decision quality.
-Then generate one targeted examiner follow-up question that probes weakness and slightly increases difficulty.
-Follow-up must be specific, scenario-based when appropriate, and non-repetitive with prior follow-ups.
-Never end with praise-only response. Never summarize and stop unless mastery is clear.`;
+const SYSTEM_PROMPT = `You are an FAA Designated Pilot Examiner conducting a Part 61 oral examination.
+You are professional, direct, and thorough. You do not praise students.
+You probe weak answers without mercy but remain fair and professional.
+Always reference specific FARs, AIM sections, or ACS codes when relevant.
+Speak in first person — terse, clinical, precise.
+Never say Great answer or Well done.
+Feedback is 2-3 sentences maximum. Be direct. No encouragement — only correction or confirmation.
+Always tie questions to the student's specific aircraft and today's actual weather conditions if provided.`;
 
-// Strict schema used with OpenAI structured outputs (strict: true).
-// Note: minimum/maximum are not supported in strict mode — confidence is validated in parseEvaluation.
-const RESPONSE_SCHEMA = {
+const SCORING_SYSTEM_PROMPT = `You are an FAA DPE evaluating a student oral exam answer.
+Score the answer against the ACS task code provided.
+Be direct and clinical. No praise.
+Feedback must be 2-3 sentences maximum.
+Identify specific regulatory or procedural gaps only.
+Reference FAR/AIM sections when relevant (e.g. FAR 91.155, AIM 7-1-27).
+Return only the JSON schema provided.`;
+
+const PROBE_SYSTEM_PROMPT = `You are an FAA Designated Pilot Examiner conducting a Part 61 oral examination.
+You are professional, direct, and thorough. You do not praise students.
+You probe weak answers without mercy but remain fair and professional.
+You always reference specific FARs, AIM sections, or ACS codes when relevant.
+You speak in first person as the examiner — terse, clinical, precise.
+Never say 'Great answer' or 'Well done.'
+When probing use phrases like:
+'Walk me through that again.'
+'You mentioned X — what is the regulatory basis for that?'
+'Okay. Now put that into practice — you are at 3,500 feet, 800 foot ceiling, 3SM visibility. What are you doing?'
+Always tie questions to the student's specific aircraft and today's actual weather conditions if provided.
+Your follow-up question MUST be scenario-based where possible.
+Do not ask what the FAR says about X — instead ask what would YOU do in this situation and why.
+The scenario should use the student's aircraft type and today's weather conditions if available.
+Never repeat a question already asked in this thread.
+If mastery is clearly demonstrated return null.`;
+
+// Scoring-only schema (Call 1)
+const SCORING_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["result", "confidence", "feedback", "missing_points", "probe_question", "acs_task_code"],
+  required: ["result", "confidence", "feedback", "missing_points", "acs_task_code"],
   properties: {
     result: { type: "string", enum: ["PASS", "PROBE", "REMEDIATE", "FAIL"] },
     confidence: { type: "number" },
     feedback: { type: "string" },
     missing_points: { type: "array", items: { type: "string" } },
-    probe_question: { anyOf: [{ type: "string" }, { type: "null" }] },
     acs_task_code: { type: "string" },
   },
 };
+
+// Probe-only schema (Call 2)
+const PROBE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["probe_question"],
+  properties: {
+    probe_question: { anyOf: [{ type: "string" }, { type: "null" }] },
+  },
+};
+
+const RED_FLAG_PHRASES = [
+  "doesn't matter",
+  "doesnt matter",
+  "always fine",
+  "never check",
+  "skip checklist",
+  "dont check",
+  "don't need to",
+  "not required",
+];
+
+const RE_REGULATORY = /\b(far|14 cfr|91\.\d+|aim|acs|61\.\d+)\b/i;
+const RE_PROCESS = /\b(first|then|next|after|before|step|procedure)\b/i;
+const RE_SAFETY = /\b(risk|hazard|safe|safety|emergency|minimum)\b/i;
+const RE_DEFINITION = /\b(is defined|means|refers to|known as)\b/i;
+
+export function preEvaluate(
+  answer: string
+): { skip: false } | { skip: true; result: EvaluationResultCode; reason: string } {
+  const wordCount = answer.trim().split(/\s+/).length;
+
+  if (wordCount < 15) {
+    return { skip: true, result: "REMEDIATE", reason: "Answer too short" };
+  }
+
+  const lower = answer.toLowerCase();
+  for (const phrase of RED_FLAG_PHRASES) {
+    if (lower.includes(phrase)) {
+      return { skip: true, result: "FAIL", reason: "Unsafe reasoning detected" };
+    }
+  }
+
+  if (wordCount > 15) {
+    const signals = [RE_REGULATORY, RE_PROCESS, RE_SAFETY, RE_DEFINITION].filter((re) =>
+      re.test(answer)
+    ).length;
+    if (signals >= 2) {
+      return { skip: false };
+    }
+  }
+
+  return { skip: false };
+}
 
 function isResult(v: unknown): v is EvaluationResultCode {
   return v === "PASS" || v === "PROBE" || v === "REMEDIATE" || v === "FAIL";
@@ -70,50 +149,26 @@ function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
 }
 
-function parseEvaluation(jsonText: string): OpenAIEvaluation | null {
-  try {
-    const parsed = JSON.parse(jsonText) as Record<string, unknown>;
-    if (!isResult(parsed.result)) return null;
-    if (typeof parsed.feedback !== "string") return null;
-    if (!Array.isArray(parsed.missing_points)) return null;
-    if (!parsed.missing_points.every((x) => typeof x === "string")) return null;
-    if (!(typeof parsed.probe_question === "string" || parsed.probe_question === null)) return null;
-    if (typeof parsed.acs_task_code !== "string") return null;
-
-    const confidenceRaw =
-      typeof parsed.confidence === "number" ? parsed.confidence : Number(parsed.confidence);
-
-    return {
-      result: parsed.result,
-      confidence: clamp01(confidenceRaw),
-      feedback: parsed.feedback.trim(),
-      missing_points: parsed.missing_points.map((x) => x.trim()).filter(Boolean),
-      probe_question:
-        typeof parsed.probe_question === "string" && parsed.probe_question.trim()
-          ? parsed.probe_question.trim()
-          : null,
-      acs_task_code: parsed.acs_task_code.trim(),
-    };
-  } catch {
-    return null;
-  }
-}
-
 // Uses the singleton OpenAI SDK client so the underlying HTTP/2 connection is reused
 // across requests (avoids per-call TCP+TLS handshake overhead).
-// max_completion_tokens: 800 — caps response length; the JSON schema is compact and never needs more.
-async function runOpenAI(messages: Array<{ role: "system" | "user"; content: string }>) {
+async function runOpenAIWithModel(
+  messages: Array<{ role: "system" | "user"; content: string }>,
+  model: string,
+  maxTokens: number,
+  schema: Record<string, unknown>,
+  schemaName: string
+) {
   const client = getOpenAIClient();
 
   const response = await client.chat.completions.create({
-    model: MODEL,
+    model,
     messages,
-    max_completion_tokens: 800,
+    max_completion_tokens: maxTokens,
     response_format: {
       type: "json_schema",
       json_schema: {
-        name: "oral_evaluation",
-        schema: RESPONSE_SCHEMA,
+        name: schemaName,
+        schema,
       },
     },
   });
@@ -127,7 +182,7 @@ async function runOpenAI(messages: Array<{ role: "system" | "user"; content: str
 }
 
 // How many recent turns to keep in full — older turns beyond this are compressed.
-const FULL_CONTEXT_TURNS = 3;
+const FULL_CONTEXT_TURNS = 2;
 
 function buildThreadContext(
   thread: EvaluateInput["priorThread"] & object
@@ -170,8 +225,23 @@ function buildThreadContext(
 }
 
 export async function evaluateWithOpenAI(input: EvaluateInput): Promise<OpenAIEvaluation | null> {
-  const priorFollowUps = (input.priorFollowUps || []).filter(Boolean).slice(-6);
-  const priorThread = (input.priorThread || []).slice(-6);
+  const pre = preEvaluate(input.studentAnswer);
+  if (pre.skip) {
+    return {
+      result: pre.result,
+      confidence: 0.9,
+      feedback:
+        pre.result === "FAIL"
+          ? "Unsafe or incorrect reasoning detected. Review procedures and regulatory requirements before continuing."
+          : "Your answer needs more depth. Provide a complete explanation including regulatory basis, procedures, and safety considerations.",
+      missing_points: ["Complete explanation required"],
+      probe_question: null,
+      acs_task_code: input.acsTaskCode,
+    };
+  }
+
+  const priorFollowUps = (input.priorFollowUps || []).filter(Boolean).slice(-3);
+  const priorThread = (input.priorThread || []).slice(-3);
   const escalationLevel = Number.isFinite(input.escalationLevel) ? Number(input.escalationLevel) : 0;
 
   const threadContext = buildThreadContext(priorThread);
@@ -187,7 +257,7 @@ export async function evaluateWithOpenAI(input: EvaluateInput): Promise<OpenAIEv
     ? `\nWeather context for this session:\nAirport: ${wctx.airport || "unknown"}\nAircraft: ${wctx.aircraft || "unknown"}\nCurrent conditions: ${wctx.raw}\nWind: ${wctx.wind || "N/A"} | Visibility: ${wctx.visibility || "N/A"} | Ceiling: ${wctx.ceiling || "N/A"}\n\nReference these conditions naturally in questions where it makes sense — e.g. asking about weather minimums, go/no-go decisions, alternate planning given today's actual ceiling and visibility.\n`
     : "";
 
-  const systemPrompt = wctx ? SYSTEM_PROMPT + WEATHER_SYSTEM_ADDENDUM : SYSTEM_PROMPT;
+  const scoringSystemPrompt = wctx ? SCORING_SYSTEM_PROMPT + WEATHER_SYSTEM_ADDENDUM : SCORING_SYSTEM_PROMPT;
 
   const baseUserPrompt = `${weatherBlock}Current examiner prompt: ${input.questionStem}
 ACS task code: ${input.acsTaskCode}
@@ -196,40 +266,126 @@ Current escalation level: ${escalationLevel}
 Prior thread context:
 ${threadContext}
 Prior follow-up questions (do not repeat or paraphrase these):
+${followUpsContext}`;
+
+  // --- Call 1: Scoring only (EVAL_MODEL / nano) ---
+  let scoringRaw = await runOpenAIWithModel(
+    [
+      { role: "system", content: scoringSystemPrompt },
+      { role: "user", content: baseUserPrompt },
+    ],
+    EVAL_MODEL,
+    300,
+    SCORING_SCHEMA,
+    "oral_scoring"
+  );
+
+  let scoringParsed = parseScoringResult(scoringRaw);
+
+  if (!scoringParsed) {
+    // Retry fallback for Call 1 only
+    scoringRaw = await runOpenAIWithModel(
+      [
+        { role: "system", content: scoringSystemPrompt },
+        {
+          role: "user",
+          content:
+            `Your previous output was invalid JSON for the required schema.\n` +
+            `Fix it and return only valid JSON with the required keys.\n` +
+            `Original context:\n${baseUserPrompt}\n\n` +
+            `Invalid output to fix:\n${scoringRaw}`,
+        },
+      ],
+      EVAL_MODEL,
+      300,
+      SCORING_SCHEMA,
+      "oral_scoring"
+    );
+    scoringParsed = parseScoringResult(scoringRaw);
+  }
+
+  if (!scoringParsed) return null;
+
+  // --- Call 2: Probe question only (PROBE_MODEL / gpt-4.1) ---
+  // Skip entirely when result is PASS
+  let probe_question: string | null = null;
+
+  if (scoringParsed.result !== "PASS") {
+    const probeSystemPrompt = wctx ? PROBE_SYSTEM_PROMPT + WEATHER_SYSTEM_ADDENDUM : PROBE_SYSTEM_PROMPT;
+
+    const probeUserPrompt = `${weatherBlock}Current examiner prompt: ${input.questionStem}
+ACS task code: ${input.acsTaskCode}
+Student answer: ${input.studentAnswer}
+Scoring result: ${scoringParsed.result} (confidence: ${scoringParsed.confidence})
+Identified gaps: ${scoringParsed.missing_points.join(", ") || "none"}
+Prior follow-up questions (do not repeat or paraphrase these):
 ${followUpsContext}
 
-Rules for probe_question:
-- Return a single follow-up examiner question unless mastery is clearly demonstrated.
-- If mastery is clearly demonstrated, you may return null.
-- If returning a question, it must be targeted and harder than the current prompt.`;
+Generate one scenario-based follow-up question that probes the student's weak areas.
+If mastery is clearly demonstrated, return null.`;
 
-  let raw = await runOpenAI([
-    { role: "system", content: systemPrompt },
-    { role: "user", content: baseUserPrompt },
-  ]);
+    const probeRaw = await runOpenAIWithModel(
+      [
+        { role: "system", content: probeSystemPrompt },
+        { role: "user", content: probeUserPrompt },
+      ],
+      PROBE_MODEL,
+      150,
+      PROBE_SCHEMA,
+      "oral_probe"
+    );
 
-  let parsed = parseEvaluation(raw);
-  if (parsed) {
-    return { ...parsed, acs_task_code: input.acsTaskCode };
+    probe_question = parseProbeResult(probeRaw);
   }
 
-  // strict: true should make this retry path unreachable in practice,
-  // but keep one fallback in case of transient model errors.
-  raw = await runOpenAI([
-    { role: "system", content: systemPrompt },
-    {
-      role: "user",
-      content:
-        `Your previous output was invalid JSON for the required schema.\n` +
-        `Fix it and return only valid JSON with the required keys.\n` +
-        `Original context:\n${baseUserPrompt}\n\n` +
-        `Invalid output to fix:\n${raw}`,
-    },
-  ]);
-  parsed = parseEvaluation(raw);
-  if (parsed) {
-    return { ...parsed, acs_task_code: input.acsTaskCode };
-  }
-
-  return null;
+  return {
+    result: scoringParsed.result,
+    confidence: scoringParsed.confidence,
+    feedback: scoringParsed.feedback,
+    missing_points: scoringParsed.missing_points,
+    probe_question,
+    acs_task_code: input.acsTaskCode,
+  };
 }
+
+type ScoringResult = {
+  result: EvaluationResultCode;
+  confidence: number;
+  feedback: string;
+  missing_points: string[];
+};
+
+function parseScoringResult(jsonText: string): ScoringResult | null {
+  try {
+    const parsed = JSON.parse(jsonText) as Record<string, unknown>;
+    if (!isResult(parsed.result)) return null;
+    if (typeof parsed.feedback !== "string") return null;
+    if (!Array.isArray(parsed.missing_points)) return null;
+    if (!parsed.missing_points.every((x) => typeof x === "string")) return null;
+
+    const confidenceRaw =
+      typeof parsed.confidence === "number" ? parsed.confidence : Number(parsed.confidence);
+
+    return {
+      result: parsed.result,
+      confidence: clamp01(confidenceRaw),
+      feedback: parsed.feedback.trim(),
+      missing_points: parsed.missing_points.map((x) => x.trim()).filter(Boolean),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parseProbeResult(jsonText: string): string | null {
+  try {
+    const parsed = JSON.parse(jsonText) as Record<string, unknown>;
+    if (typeof parsed.probe_question === "string" && parsed.probe_question.trim()) {
+      return parsed.probe_question.trim();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
