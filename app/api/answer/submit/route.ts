@@ -325,9 +325,9 @@ export async function POST(req: Request) {
         INSERT INTO session_questions
           (session_id, question_id, acs_task, question_text, is_probe)
         VALUES
-          (?, NULL, ?, ?, 1)
+          (?, ?, ?, ?, 1)
         `,
-        [sessionId, acsTaskCode, labeledFollowUp]
+        [sessionId, baseQuestionId || null, acsTaskCode, labeledFollowUp]
       );
     }
 
