@@ -398,11 +398,11 @@ export async function POST(req: Request) {
 
     if (useScenario) {
       const weatherData = session.session_weather
-        ? JSON.parse(session.session_weather as string)
+        ? (typeof session.session_weather === "string" ? JSON.parse(session.session_weather) : session.session_weather)
         : null;
 
       const focusAreas = session.focus_areas
-        ? JSON.parse(session.focus_areas as string)
+        ? (typeof session.focus_areas === "string" ? JSON.parse(session.focus_areas as string) : session.focus_areas)
         : [];
 
       const [recentRows] = await conn.execute(

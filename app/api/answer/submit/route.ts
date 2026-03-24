@@ -19,7 +19,7 @@ function defaultEvaluation(acsTaskCode: string): OpenAIEvaluation {
   return {
     result: "PROBE",
     confidence: 0.0,
-    feedback: "Model error - please expand your answer",
+    feedback: "Evaluation temporarily unavailable. Your answer was recorded — continue to the next question.",
     missing_points: [],
     probe_question: null,
     acs_task_code: acsTaskCode,
@@ -191,8 +191,11 @@ export async function POST(req: Request) {
 
     const parsedWeather = session.session_weather
       ? (() => {
-          try { return JSON.parse(session.session_weather); }
-          catch (e) { console.error(`Failed to parse session_weather for session ${sessionId}:`, e); return null; }
+          try {
+            return typeof session.session_weather === "string"
+              ? JSON.parse(session.session_weather)
+              : session.session_weather;
+          } catch (e) { console.error(`Failed to parse session_weather for session ${sessionId}:`, e); return null; }
         })()
       : null;
 

@@ -173,8 +173,14 @@ async function runOpenAIWithModel(
     },
   });
 
-  const content = response.choices[0]?.message?.content;
+  const choice = response.choices[0];
+  const content = choice?.message?.content;
+
   if (!content || typeof content !== "string") {
+    const refusal = choice?.message?.refusal;
+    const finishReason = choice?.finish_reason;
+    if (refusal) throw new Error(`OpenAI refused: ${refusal}`);
+    if (finishReason === "length") throw new Error("OpenAI hit max_tokens — response truncated");
     throw new Error("OpenAI returned empty content");
   }
 
@@ -269,38 +275,49 @@ Prior follow-up questions (do not repeat or paraphrase these):
 ${followUpsContext}`;
 
   // --- Call 1: Scoring only (EVAL_MODEL / nano) ---
-  let scoringRaw = await runOpenAIWithModel(
-    [
-      { role: "system", content: scoringSystemPrompt },
-      { role: "user", content: baseUserPrompt },
-    ],
-    EVAL_MODEL,
-    300,
-    SCORING_SCHEMA,
-    "oral_scoring"
-  );
-
-  let scoringParsed = parseScoringResult(scoringRaw);
-
-  if (!scoringParsed) {
-    // Retry fallback for Call 1 only
+  let scoringRaw: string;
+  try {
     scoringRaw = await runOpenAIWithModel(
       [
         { role: "system", content: scoringSystemPrompt },
-        {
-          role: "user",
-          content:
-            `Your previous output was invalid JSON for the required schema.\n` +
-            `Fix it and return only valid JSON with the required keys.\n` +
-            `Original context:\n${baseUserPrompt}\n\n` +
-            `Invalid output to fix:\n${scoringRaw}`,
-        },
+        { role: "user", content: baseUserPrompt },
       ],
       EVAL_MODEL,
       300,
       SCORING_SCHEMA,
       "oral_scoring"
     );
+  } catch (err) {
+    console.error("[evaluateWithOpenAI] scoring call failed:", err);
+    return null;
+  }
+
+  let scoringParsed = parseScoringResult(scoringRaw);
+
+  if (!scoringParsed) {
+    // Retry fallback for Call 1 only
+    try {
+      scoringRaw = await runOpenAIWithModel(
+        [
+          { role: "system", content: scoringSystemPrompt },
+          {
+            role: "user",
+            content:
+              `Your previous output was invalid JSON for the required schema.\n` +
+              `Fix it and return only valid JSON with the required keys.\n` +
+              `Original context:\n${baseUserPrompt}\n\n` +
+              `Invalid output to fix:\n${scoringRaw}`,
+          },
+        ],
+        EVAL_MODEL,
+        300,
+        SCORING_SCHEMA,
+        "oral_scoring"
+      );
+    } catch (err) {
+      console.error("[evaluateWithOpenAI] scoring retry failed:", err);
+      return null;
+    }
     scoringParsed = parseScoringResult(scoringRaw);
   }
 
@@ -324,18 +341,22 @@ ${followUpsContext}
 Generate one scenario-based follow-up question that probes the student's weak areas.
 If mastery is clearly demonstrated, return null.`;
 
-    const probeRaw = await runOpenAIWithModel(
-      [
-        { role: "system", content: probeSystemPrompt },
-        { role: "user", content: probeUserPrompt },
-      ],
-      PROBE_MODEL,
-      150,
-      PROBE_SCHEMA,
-      "oral_probe"
-    );
-
-    probe_question = parseProbeResult(probeRaw);
+    try {
+      const probeRaw = await runOpenAIWithModel(
+        [
+          { role: "system", content: probeSystemPrompt },
+          { role: "user", content: probeUserPrompt },
+        ],
+        PROBE_MODEL,
+        150,
+        PROBE_SCHEMA,
+        "oral_probe"
+      );
+      probe_question = parseProbeResult(probeRaw);
+    } catch (err) {
+      console.error("[evaluateWithOpenAI] probe call failed:", err);
+      // probe_question stays null — caller has a buildFallbackFollowUp fallback
+    }
   }
 
   return {
