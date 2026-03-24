@@ -412,8 +412,8 @@ export async function POST(req: Request) {
       const recentTaskCodes = (recentRows as any[]).map((r) => r.acs_task);
 
       const scenario = await generateScenarioQuestion({
-        airport: session.airport,
-        aircraft: session.aircraft,
+        airport: session.airport ?? "",
+        aircraft: session.aircraft ?? "",
         mode: session.mode as "PPL" | "IR" | "CPL",
         weather: weatherData || {},
         focusAreas,
