@@ -48,16 +48,25 @@ Feedback is 2-3 sentences maximum. Be direct. No encouragement — only correcti
 Always tie questions to the student's specific aircraft and today's actual weather conditions if provided.`;
 
 const SCORING_SYSTEM_PROMPT = `You are an FAA DPE evaluating a student oral exam answer.
-Score the answer against the ACS task code provided.
-Be direct and clinical. No praise.
-Feedback must be 2-3 sentences maximum.
-Identify specific regulatory or procedural gaps only.
+Read the student's answer carefully and completely before scoring.
+Credit the student for EVERYTHING they said correctly.
+Only penalize for what is genuinely missing or incorrect.
+
+Scoring guide:
+- PASS: Student demonstrated solid understanding of the topic. Answer is complete, accurate, and shows applied knowledge. Minor omissions are acceptable if core concept is correct.
+- PROBE: Answer is partially correct but missing 1-2 key points. Student shows understanding but needs to go deeper on something specific.
+- REMEDIATE: Answer has significant gaps or some incorrect information. Student needs to review this topic before retesting.
+- FAIL: Answer is fundamentally wrong, unsafe, or shows dangerous misunderstanding. Reserve FAIL for genuinely bad answers only.
+
+IMPORTANT: If a student explicitly cites a specific FAR or AIM section and correctly applies it, that MUST be credited. Do not give FAIL if the student clearly demonstrated the required knowledge.
+
+Feedback must be 2-3 sentences. Be specific about what was good and what specifically was missing — not generic criticism.
 Reference FAR/AIM sections when relevant (e.g. FAR 91.155, AIM 7-1-27).
 Return only the JSON schema provided.`;
 
 const PROBE_SYSTEM_PROMPT = `You are an FAA Designated Pilot Examiner conducting a Part 61 oral examination.
 You are professional, direct, and thorough. You do not praise students.
-You probe weak answers without mercy but remain fair and professional.
+You probe genuine gaps in knowledge. If the student cited a regulation correctly and applied it accurately, acknowledge that and probe something they actually missed — do not ask them to repeat something they already said.
 You always reference specific FARs, AIM sections, or ACS codes when relevant.
 You speak in first person as the examiner — terse, clinical, precise.
 Never say 'Great answer' or 'Well done.'
@@ -117,7 +126,7 @@ export function preEvaluate(
 ): { skip: false } | { skip: true; result: EvaluationResultCode; reason: string } {
   const wordCount = answer.trim().split(/\s+/).length;
 
-  if (wordCount < 15) {
+  if (wordCount < 10) {
     return { skip: true, result: "REMEDIATE", reason: "Answer too short" };
   }
 
@@ -265,7 +274,9 @@ export async function evaluateWithOpenAI(input: EvaluateInput): Promise<OpenAIEv
 
   const scoringSystemPrompt = wctx ? SCORING_SYSTEM_PROMPT + WEATHER_SYSTEM_ADDENDUM : SCORING_SYSTEM_PROMPT;
 
-  const baseUserPrompt = `${weatherBlock}Current examiner prompt: ${input.questionStem}
+  const baseUserPrompt = `IMPORTANT: Read the student's complete answer carefully before scoring. Credit everything they said correctly. Only penalize genuine gaps.
+
+${weatherBlock}Current examiner prompt: ${input.questionStem}
 ACS task code: ${input.acsTaskCode}
 Student answer: ${input.studentAnswer}
 Current escalation level: ${escalationLevel}
@@ -322,6 +333,18 @@ ${followUpsContext}`;
   }
 
   if (!scoringParsed) return null;
+
+  // Sanity check: detailed answers with regulatory references should never be FAIL
+  if (scoringParsed.result === "FAIL") {
+    const wordCount = input.studentAnswer.trim().split(/\s+/).length;
+    const hasFARReference = /\b(far|14 cfr|91\.\d+|61\.\d+|aim)\b/i.test(input.studentAnswer);
+    if (wordCount > 100 && hasFARReference) {
+      scoringParsed.result = "PROBE";
+      scoringParsed.confidence = Math.min(scoringParsed.confidence, 0.6);
+      scoringParsed.feedback =
+        scoringParsed.feedback + " Note: Answer contained regulatory references — review for completeness.";
+    }
+  }
 
   // --- Call 2: Probe question only (PROBE_MODEL / gpt-4.1) ---
   // Skip entirely when result is PASS
