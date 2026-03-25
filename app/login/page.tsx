@@ -56,16 +56,14 @@ function LoginPageContent() {
     setIsEmailLoading(true);
 
     try {
-      const result = await signIn("email", {
+      const result = await signIn("resend", {
         email,
         callbackUrl,
         redirect: false,
       });
 
       if (!result || result.error) {
-        setErrorMessage(
-          "Email sign-in is not available right now. Use Google sign-in or configure an Email provider in NextAuth."
-        );
+        setErrorMessage(`Error: ${result?.error ?? "unknown"}`);
         return;
       }
 
