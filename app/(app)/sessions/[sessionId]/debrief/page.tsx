@@ -7,6 +7,7 @@ import { DrillWeakAreas, type WeakArea } from "@/components/figma/DrillWeakAreas
 import { getSessionResults } from "@/lib/session-results";
 import { computeOverallGrade, PASSING_SCORE_PERCENT } from "@/lib/session-grading";
 import { auth } from "@/auth";
+import { pool } from "@/lib/db";
 
 type ResultCode = "PASS" | "PROBE" | "REMEDIATE" | "FAIL";
 
@@ -121,7 +122,45 @@ export default async function DebriefPage({ params }: { params: Promise<{ sessio
     );
   }
 
-  const data = await getSessionResults(sessionId, userId);
+  // Determine viewer's access role in parallel
+  const [[ownerRows], [instructorRows], [adminRows]] = await Promise.all([
+    pool.execute(
+      "SELECT id FROM oral_sessions WHERE id = ? AND user_id = ? LIMIT 1",
+      [sessionId, userId]
+    ),
+    pool.execute(
+      `SELECT 1 FROM oral_sessions os
+       JOIN instructor_students ist ON ist.student_id = os.user_id
+       WHERE os.id = ? AND ist.instructor_id = ? LIMIT 1`,
+      [sessionId, userId]
+    ),
+    pool.execute(
+      `SELECT 1 FROM oral_sessions os
+       JOIN school_members sm1 ON sm1.user_id = os.user_id
+       JOIN school_members sm2 ON sm2.school_id = sm1.school_id
+         AND sm2.user_id = ? AND sm2.role = 'admin'
+       WHERE os.id = ? LIMIT 1`,
+      [userId, sessionId]
+    ),
+  ]);
+
+  const isOwner = (ownerRows as unknown[]).length > 0;
+  const isInstructor = (instructorRows as unknown[]).length > 0;
+  const isAdmin = (adminRows as unknown[]).length > 0;
+
+  if (!isOwner && !isInstructor && !isAdmin) {
+    return (
+      <div className="max-w-5xl mx-auto space-y-6">
+        <p className="text-foreground">Session not found.</p>
+        <Link href="/sessions" className="text-[#1e3a5f] hover:text-[#2d5a8f]">
+          Back to Sessions
+        </Link>
+      </div>
+    );
+  }
+
+  const viewerRole = isOwner ? "owner" : isInstructor ? "instructor" : "admin";
+  const data = await getSessionResults(sessionId, userId, viewerRole);
 
   if (!data) {
     return (
@@ -175,11 +214,36 @@ export default async function DebriefPage({ params }: { params: Promise<{ sessio
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
-        <Link href="/sessions" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+        <Link
+          href={isInstructor ? `/instructor/${data.session.student_id}` : "/sessions"}
+          className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+        >
           <ArrowLeft className="h-4 w-4" />
-          <span className="text-sm">Back to Sessions</span>
+          <span className="text-sm">{isInstructor ? "Back to Student" : "Back to Sessions"}</span>
         </Link>
       </div>
+
+      {(isInstructor || isAdmin) && (
+        <div className="rounded-lg bg-[#1e3a5f]/5 border border-[#1e3a5f]/20 px-4 py-3 flex items-center gap-3">
+          <div className="h-8 w-8 rounded-full bg-[#1e3a5f] text-white flex items-center justify-center text-xs font-medium shrink-0">
+            {isAdmin ? "ADM" : "CFI"}
+          </div>
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              Viewing as {isAdmin ? "Admin" : "Instructor"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              You are viewing your student&apos;s session debrief
+            </p>
+          </div>
+          <Link
+            href={isInstructor ? `/instructor/${data.session.student_id}` : "/instructor"}
+            className="ml-auto text-sm text-[#1e3a5f] hover:underline whitespace-nowrap"
+          >
+            ← Back to Student
+          </Link>
+        </div>
+      )}
 
       <div className="bg-gradient-to-br from-white to-[#f8f9fa] rounded-xl border-2 border-[#1e3a5f] p-8 shadow-lg">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
@@ -310,7 +374,7 @@ export default async function DebriefPage({ params }: { params: Promise<{ sessio
         </div>
       </div>
 
-      <CfiNotesSection sessionId={sessionId} studentId={userId} />
+      <CfiNotesSection sessionId={sessionId} studentId={data.session.student_id} />
 
       <DrillWeakAreas weakAreas={weakAreas} />
 

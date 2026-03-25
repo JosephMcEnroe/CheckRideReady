@@ -45,6 +45,7 @@ export type SessionQuestionResult = {
 export type SessionResultsPayload = {
   session: {
     id: string;
+    student_id: string;
     rating_type: string;
     status: "active" | "completed";
     started_at: string | null;
@@ -66,19 +67,64 @@ export type SessionResultsPayload = {
 
 export async function getSessionResults(
   sessionId: string,
-  userId: string
+  userId: string,
+  viewerRole?: "owner" | "instructor" | "admin"
 ): Promise<SessionResultsPayload | null> {
-  const [sRows] = await pool.execute(
-    `SELECT id, user_id, mode, status, started_at, ended_at, overall_grade, overall_summary,
-            current_question_id, current_acs_task_code
-       FROM oral_sessions
-      WHERE id = ?
-        AND user_id = ?
-      LIMIT 1`,
-    [sessionId, userId]
-  );
+  let session: DbSessionRow | undefined;
 
-  const session = (sRows as DbSessionRow[])[0];
+  if (!viewerRole || viewerRole === "owner") {
+    const [sRows] = await pool.execute(
+      `SELECT id, user_id, mode, status, started_at, ended_at, overall_grade, overall_summary,
+              current_question_id, current_acs_task_code
+         FROM oral_sessions
+        WHERE id = ?
+          AND user_id = ?
+        LIMIT 1`,
+      [sessionId, userId]
+    );
+    session = (sRows as DbSessionRow[])[0];
+  } else if (viewerRole === "instructor") {
+    const [accessRows] = await pool.execute(
+      `SELECT 1 FROM oral_sessions os
+       JOIN instructor_students ist ON ist.student_id = os.user_id
+       WHERE os.id = ? AND ist.instructor_id = ?
+       LIMIT 1`,
+      [sessionId, userId]
+    );
+    if ((accessRows as unknown[]).length === 0) return null;
+
+    const [sRows] = await pool.execute(
+      `SELECT id, user_id, mode, status, started_at, ended_at, overall_grade, overall_summary,
+              current_question_id, current_acs_task_code
+         FROM oral_sessions
+        WHERE id = ?
+        LIMIT 1`,
+      [sessionId]
+    );
+    session = (sRows as DbSessionRow[])[0];
+  } else if (viewerRole === "admin") {
+    const [accessRows] = await pool.execute(
+      `SELECT 1 FROM oral_sessions os
+       JOIN school_members sm1 ON sm1.user_id = os.user_id
+       JOIN school_members sm2 ON sm2.school_id = sm1.school_id
+         AND sm2.user_id = ? AND sm2.role = 'admin'
+       WHERE os.id = ?
+       LIMIT 1`,
+      [userId, sessionId]
+    );
+    if ((accessRows as unknown[]).length === 0) return null;
+
+    const [sRows] = await pool.execute(
+      `SELECT id, user_id, mode, status, started_at, ended_at, overall_grade, overall_summary,
+              current_question_id, current_acs_task_code
+         FROM oral_sessions
+        WHERE id = ?
+        LIMIT 1`,
+      [sessionId]
+    );
+    session = (sRows as DbSessionRow[])[0];
+  }
+
   if (!session) return null;
 
   const [questionRows] = await pool.execute(
@@ -137,6 +183,7 @@ export async function getSessionResults(
   return {
     session: {
       id: session.id,
+      student_id: session.user_id,
       rating_type: session.mode,
       status: session.status,
       started_at: session.started_at ?? null,
