@@ -3,6 +3,7 @@ import { AlertCircle, ArrowLeft, CheckCircle2, Download, TrendingDown, TrendingU
 import { StatusBadge } from "@/components/figma/StatusBadge";
 import { CfiNotesSection } from "@/components/figma/CfiNotesSection";
 import { ShareDebriefButton } from "@/components/figma/ShareDebriefButton";
+import { DrillWeakAreas, type WeakArea } from "@/components/figma/DrillWeakAreas";
 import { getSessionResults } from "@/lib/session-results";
 import { computeOverallGrade, PASSING_SCORE_PERCENT } from "@/lib/session-grading";
 import { auth } from "@/auth";
@@ -153,6 +154,24 @@ export default async function DebriefPage({ params }: { params: Promise<{ sessio
   const strengths = deriveStrengths(data.questions, data.session.overall_summary);
   const improvements = deriveImprovements(data.questions, data.session.overall_summary);
 
+  // Compute weak areas for drill section
+  const weakAreaMap = new Map<string, WeakArea>();
+  for (const q of data.questions) {
+    if ((q.result === "REMEDIATE" || q.result === "FAIL") && q.acs_task && q.acs_area) {
+      const existing = weakAreaMap.get(q.acs_task);
+      if (existing) {
+        existing.fail_count += 1;
+      } else {
+        weakAreaMap.set(q.acs_task, {
+          acs_task_code: q.acs_task,
+          acs_area: q.acs_area,
+          fail_count: 1,
+        });
+      }
+    }
+  }
+  const weakAreas = [...weakAreaMap.values()].sort((a, b) => b.fail_count - a.fail_count);
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
@@ -292,6 +311,8 @@ export default async function DebriefPage({ params }: { params: Promise<{ sessio
       </div>
 
       <CfiNotesSection sessionId={sessionId} studentId={userId} />
+
+      <DrillWeakAreas weakAreas={weakAreas} />
 
       <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
         <Link

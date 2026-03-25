@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   ExternalLink,
+  Zap,
 } from "lucide-react";
 import { StatusBadge } from "@/components/figma/StatusBadge";
 import { readJsonResponse } from "@/lib/http";
@@ -104,6 +105,22 @@ export default function ProgressPage() {
   const [data, setData] = useState<ProgressData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [drillLoading, setDrillLoading] = useState<string | null>(null);
+
+  const startDrill = async (code: string, name: string) => {
+    setDrillLoading(code);
+    try {
+      const res = await fetch("/api/sessions/drill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ acs_task_code: code, acs_area: name }),
+      });
+      const json = await res.json();
+      if (json.sessionId) router.push(`/sessions/${json.sessionId}/drill`);
+    } finally {
+      setDrillLoading(null);
+    }
+  };
 
   useEffect(() => {
     fetch("/api/user/progress")
@@ -246,6 +263,27 @@ export default function ProgressPage() {
                       style={{ width: area.status !== "Not Started" ? `${area.masteryPct}%` : "0%" }}
                     />
                   </div>
+                  {area.status === "Needs Work" && (
+                    <div className="px-4 pb-3">
+                      <button
+                        onClick={() => startDrill(area.code, area.name)}
+                        disabled={drillLoading === area.code}
+                        className="w-full py-1.5 text-xs font-medium text-[#ff6b35] border border-[#ff6b35]/30 rounded-lg hover:bg-[#ff6b35]/5 transition-colors flex items-center justify-center gap-1 disabled:opacity-60"
+                      >
+                        {drillLoading === area.code ? (
+                          <>
+                            <span className="h-3 w-3 animate-spin rounded-full border-2 border-[#ff6b35] border-t-transparent" />
+                            Starting...
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="h-3 w-3" />
+                            Drill This Area
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}

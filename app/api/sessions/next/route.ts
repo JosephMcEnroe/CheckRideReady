@@ -43,6 +43,10 @@ type SessionRow = {
   airport: string | null;
   aircraft: string | null;
   focus_areas: string | null;
+  is_drill: 0 | 1;
+  drill_acs_task: string | null;
+  drill_acs_area: string | null;
+  drill_question_limit: number;
 };
 
 type QuestionRow = {
@@ -222,7 +226,8 @@ export async function POST(req: Request) {
               probe_count_for_task, max_probes_per_task,
               current_question_id, current_acs_task_code,
               last_result, last_probe_question,
-              session_weather, airport, aircraft, focus_areas
+              session_weather, airport, aircraft, focus_areas,
+              is_drill, drill_acs_task, drill_acs_area, drill_question_limit
        FROM oral_sessions
        WHERE id = ?
          AND user_id = ?
@@ -245,6 +250,31 @@ export async function POST(req: Request) {
         reason: "already_completed",
         redirectTo: `/sessions/${sessionId}/debrief`,
       });
+    }
+
+    // Drill mode: check if question limit has been reached
+    let drillQuestionsCompleted = 0;
+    if (session.is_drill === 1) {
+      const [drillCountRows] = await conn.execute(
+        `SELECT COUNT(*) AS answered
+         FROM session_questions
+         WHERE session_id = ? AND result IS NOT NULL`,
+        [sessionId]
+      );
+      drillQuestionsCompleted = Number(
+        ((drillCountRows as unknown[])[0] as { answered?: number })?.answered || 0
+      );
+      const drillLimit = session.drill_question_limit || 10;
+      if (drillQuestionsCompleted >= drillLimit) {
+        await markSessionCompleted(conn, sessionId, userId);
+        await conn.commit();
+        return Response.json({
+          type: "SESSION_COMPLETE",
+          sessionId,
+          reason: "drill_complete",
+          redirectTo: `/sessions/${sessionId}/debrief`,
+        });
+      }
     }
 
     const [pendingRows] = await conn.execute(
@@ -309,8 +339,10 @@ export async function POST(req: Request) {
     const recentIds = parseRecentIds(session.recent_question_ids || "[]");
     const askedCount = recentIds.length;
 
-    const activeTaskFilter =
-      taskFilter || (useCurrentTaskFilter ? session.current_acs_task_code : null) || null;
+    // Drill mode always locks to the drill task
+    const activeTaskFilter = session.is_drill === 1
+      ? session.drill_acs_task
+      : taskFilter || (useCurrentTaskFilter ? session.current_acs_task_code : null) || null;
     const modeJson = JSON.stringify(session.mode);
     let poolCountSql = `
       SELECT COUNT(*) AS total
@@ -406,21 +438,24 @@ export async function POST(req: Request) {
       }
     }
 
-    const useScenario =
-      Math.random() < SCENARIO_RATIO &&
-      !forceNewBase &&
-      !!session.session_weather &&
-      !!session.airport &&
-      !!session.aircraft;
+    const useScenario = session.is_drill === 1
+      ? (!forceNewBase && !!session.session_weather && !!session.airport && !!session.aircraft)
+      : (Math.random() < SCENARIO_RATIO &&
+          !forceNewBase &&
+          !!session.session_weather &&
+          !!session.airport &&
+          !!session.aircraft);
 
     if (useScenario) {
       const weatherData = session.session_weather
         ? (typeof session.session_weather === "string" ? JSON.parse(session.session_weather) : session.session_weather)
         : null;
 
-      const focusAreas = session.focus_areas
-        ? (typeof session.focus_areas === "string" ? JSON.parse(session.focus_areas as string) : session.focus_areas)
-        : [];
+      const focusAreas = session.is_drill === 1 && session.drill_acs_task
+        ? [session.drill_acs_task]
+        : session.focus_areas
+          ? (typeof session.focus_areas === "string" ? JSON.parse(session.focus_areas as string) : session.focus_areas)
+          : [];
 
       const [recentRows] = await conn.execute(
         "SELECT DISTINCT acs_task FROM session_questions WHERE session_id = ? AND acs_task IS NOT NULL ORDER BY id DESC LIMIT 5",
@@ -461,7 +496,16 @@ export async function POST(req: Request) {
             acs_task_code: scenario.acs_task_code,
             acs_area: `${scenario.acs_area} (Live Scenario)`,
           },
-          meta: { kind: "base", is_scenario: true },
+          meta: {
+            kind: "base",
+            is_scenario: true,
+            ...(session.is_drill === 1 && {
+              is_drill: true,
+              drill_area: session.drill_acs_area,
+              drill_question_limit: session.drill_question_limit,
+              questions_completed: drillQuestionsCompleted,
+            }),
+          },
         });
       }
       // scenario generation failed — fall through to static question below
@@ -554,7 +598,15 @@ export async function POST(req: Request) {
         acs_task_code: question.acs_task_code,
         acs_area: question.acs_area,
       },
-      meta: { kind: "base" },
+      meta: {
+        kind: "base",
+        ...(session.is_drill === 1 && {
+          is_drill: true,
+          drill_area: session.drill_acs_area,
+          drill_question_limit: session.drill_question_limit,
+          questions_completed: drillQuestionsCompleted,
+        }),
+      },
     });
   } catch (err: unknown) {
     await conn.rollback();
