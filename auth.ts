@@ -32,6 +32,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Resend({
       apiKey: process.env.RESEND_API_KEY,
       from: "ProCheckride <noreply@procheckride.com>",
+      allowDangerousEmailAccountLinking: true,
       async sendVerificationRequest({ identifier, url }) {
         const result = await sendMagicLinkEmail({ to: identifier, url });
         if (!result.success) {
