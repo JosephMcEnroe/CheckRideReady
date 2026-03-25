@@ -7,6 +7,13 @@
  *     ADD COLUMN IF NOT EXISTS emailVerified TIMESTAMP NULL,
  *     ADD COLUMN IF NOT EXISTS image TEXT NULL;
  *
+ *   CREATE TABLE IF NOT EXISTS verification_tokens (
+ *     identifier  VARCHAR(255) NOT NULL,
+ *     token       VARCHAR(255) NOT NULL,
+ *     expires     TIMESTAMP    NOT NULL,
+ *     PRIMARY KEY (identifier, token)
+ *   );
+ *
  *   CREATE TABLE IF NOT EXISTS accounts (
  *     id                VARCHAR(255)  NOT NULL PRIMARY KEY,
  *     userId            VARCHAR(255)  NOT NULL,
@@ -110,6 +117,37 @@ export function MySQLAdapter(): Adapter {
         ]
       );
       return account;
+    },
+
+    async createVerificationToken(token) {
+      await pool.execute(
+        `INSERT INTO verification_tokens (identifier, token, expires)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE expires = VALUES(expires)`,
+        [token.identifier, token.token, token.expires]
+      );
+      return token;
+    },
+
+    async useVerificationToken({ identifier, token }) {
+      const [rows] = await pool.execute(
+        `SELECT identifier, token, expires FROM verification_tokens
+         WHERE identifier = ? AND token = ? LIMIT 1`,
+        [identifier, token]
+      );
+      const row = (rows as Record<string, unknown>[])[0];
+      if (!row) return null;
+
+      await pool.execute(
+        `DELETE FROM verification_tokens WHERE identifier = ? AND token = ?`,
+        [identifier, token]
+      );
+
+      return {
+        identifier: String(row.identifier),
+        token: String(row.token),
+        expires: new Date(row.expires as string),
+      };
     },
 
     // ── JWT mode stubs — these are never called when session strategy is "jwt" ──
