@@ -3,7 +3,7 @@
 import { Check, Mail, Plane } from "lucide-react";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 
 function LoginPageContent() {
   const router = useRouter();
@@ -46,8 +46,11 @@ function LoginPageContent() {
     "Instructor analytics",
   ];
 
-  const handleMagicLink = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleMagicLink = async () => {
+    if (!email.trim() || !email.includes("@")) {
+      setErrorMessage("Please enter a valid email address");
+      return;
+    }
     setErrorMessage(null);
     setInfoMessage(null);
     setIsEmailLoading(true);
@@ -210,7 +213,7 @@ function LoginPageContent() {
                   </div>
                 </div>
 
-                <form onSubmit={handleMagicLink} className="space-y-4">
+                <div className="space-y-4">
                   <div>
                     <label htmlFor="email" className="text-[13px] text-foreground block mb-1.5">
                       Email
@@ -220,7 +223,7 @@ function LoginPageContent() {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      required
+                      onKeyDown={(e) => { if (e.key === "Enter") handleMagicLink(); }}
                       disabled={isGoogleLoading || isEmailLoading}
                       className="w-full h-10 px-3.5 text-[14px] rounded-lg border border-border bg-input-background focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                       placeholder="you@example.com"
@@ -228,7 +231,8 @@ function LoginPageContent() {
                   </div>
 
                   <button
-                    type="submit"
+                    type="button"
+                    onClick={handleMagicLink}
                     disabled={isGoogleLoading || isEmailLoading}
                     className="w-full h-10 text-[14px] rounded-lg bg-primary text-primary-foreground font-medium hover:opacity-95 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
                   >
@@ -238,7 +242,7 @@ function LoginPageContent() {
                   <p className="text-[11px] text-muted-foreground text-center mt-2">
                     Link expires in 24 hours · Check spam if not received
                   </p>
-                </form>
+                </div>
 
                 {errorMessage ? (
                   <p className="text-[12px] text-destructive text-center mt-3" role="alert">
