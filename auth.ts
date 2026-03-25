@@ -29,17 +29,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientId: process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
     }),
-    Resend({
-      apiKey: process.env.RESEND_API_KEY,
-      from: "ProCheckride <noreply@procheckride.com>",
-      allowDangerousEmailAccountLinking: true,
-      async sendVerificationRequest({ identifier, url }) {
-        const result = await sendMagicLinkEmail({ to: identifier, url });
-        if (!result.success) {
-          throw new Error(result.error || "Failed to send magic link email");
-        }
-      },
-    }),
+    Object.assign(
+      Resend({
+        apiKey: process.env.RESEND_API_KEY,
+        from: "ProCheckride <noreply@procheckride.com>",
+        async sendVerificationRequest({ identifier, url }) {
+          const result = await sendMagicLinkEmail({ to: identifier, url });
+          if (!result.success) {
+            throw new Error(result.error || "Failed to send magic link email");
+          }
+        },
+      }),
+      { allowDangerousEmailAccountLinking: true }
+    ),
   ],
   pages: {
     signIn: "/login",
