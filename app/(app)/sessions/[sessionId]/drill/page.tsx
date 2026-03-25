@@ -68,7 +68,7 @@ type PromptState = {
   acsTask: string | null;
   acsArea: string | null;
   kind: "base" | "probe";
-  isScenario?: boolean;
+  isScenario?: boolean | undefined;
 };
 
 function displayQuestionText(text: string) {
@@ -117,6 +117,7 @@ export default function DrillPage() {
       acsTask: pending.acs_task,
       acsArea: pending.acs_area,
       kind: pending.is_probe ? ("probe" as const) : ("base" as const),
+      isScenario: undefined,
     } satisfies PromptState;
   }, [questions]);
 
