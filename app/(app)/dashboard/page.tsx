@@ -33,6 +33,7 @@ function formatDateTime(value: string) {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +53,17 @@ export default function DashboardPage() {
         setSessions(sessionsJson.sessions || []);
 
         const schoolJson = await readJsonResponse<{ school?: School | null }>(schoolRes);
-        setSchool(schoolJson.school ?? null);
+        const fetchedSchool = schoolJson.school ?? null;
+        setSchool(fetchedSchool);
+
+        if (fetchedSchool?.role === "admin") {
+          router.replace("/school/dashboard");
+          return;
+        }
+        if (fetchedSchool?.role === "instructor") {
+          router.replace("/instructor");
+          return;
+        }
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : "Failed to load sessions");
       } finally {
@@ -60,7 +71,7 @@ export default function DashboardPage() {
       }
     }
     loadData();
-  }, []);
+  }, [router]);
 
   const latestSession = useMemo(() => sessions[0] || null, [sessions]);
   const completedSessions = useMemo(() => sessions.filter((s) => s.last_result !== null), [sessions]);

@@ -37,8 +37,15 @@ export function FigmaLayout({ children }: { children: React.ReactNode }) {
       .catch(() => setSchool(null));
   }, []);
 
+  const dashboardHref =
+    school?.role === "admin"
+      ? "/school/dashboard"
+      : school?.role === "instructor"
+      ? "/instructor"
+      : "/dashboard";
+
   const baseNavigation = [
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Dashboard", href: dashboardHref, icon: LayoutDashboard },
     { name: "Sessions", href: "/sessions", icon: ClipboardList },
   ];
 
@@ -62,7 +69,13 @@ export function FigmaLayout({ children }: { children: React.ReactNode }) {
   const navigation = [...baseNavigation, ...studentNavigation, ...schoolNavigation];
 
   const isActive = (path: string) => {
-    if (path === "/dashboard") return pathname === "/dashboard";
+    if (path === "/dashboard" || path === "/school/dashboard" || path === "/instructor") {
+      return (
+        pathname === "/dashboard" ||
+        pathname === "/school/dashboard" ||
+        pathname === "/instructor"
+      );
+    }
     return pathname === path || pathname.startsWith(`${path}/`);
   };
 
