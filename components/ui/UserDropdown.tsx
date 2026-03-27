@@ -34,16 +34,24 @@ const roleBadgeClass: Record<UserRole, string> = {
   admin: "bg-red-100 text-red-700 border-red-200",
 };
 
+type School = {
+  id: string;
+  name: string;
+  role: string;
+};
+
 type UserDropdownProps = {
   trigger?: "full" | "avatar";
   menuDirection?: "up" | "down";
   onNavigate?: () => void;
+  school?: School | null;
 };
 
 export default function UserDropdown({
   trigger = "full",
   menuDirection = "down",
   onNavigate,
+  school,
 }: UserDropdownProps) {
   const { data } = useSession();
   const pathname = usePathname();
@@ -56,9 +64,15 @@ export default function UserDropdown({
   const userInitials = useMemo(() => initials(user.name, user.email), [user.name, user.email]);
   const nameLabel = user.name || user.email || "Signed in user";
   const roleLabel = role ? role.charAt(0).toUpperCase() + role.slice(1) : "Member";
-  const secondaryItem = role === "admin" ? { label: "Admin Panel", href: "/admin" } : { label: "Billing", href: "/billing" };
-  const secondaryActive = pathname === secondaryItem.href || pathname.startsWith(`${secondaryItem.href}/`);
-  const SecondaryIcon = role === "admin" ? Shield : CreditCard;
+  const isSchoolAdmin = school?.role === "admin";
+  const isSchoolMember = school !== null && school !== undefined;
+  const secondaryItem = isSchoolAdmin
+    ? { label: "Admin Panel", href: "/admin" }
+    : !isSchoolMember
+    ? { label: "Billing", href: "/billing" }
+    : null;
+  const secondaryActive = secondaryItem !== null && (pathname === secondaryItem.href || pathname.startsWith(`${secondaryItem.href}/`));
+  const SecondaryIcon = isSchoolAdmin ? Shield : CreditCard;
   const menuPositionClass = menuDirection === "up" ? "bottom-full mb-2" : "top-full mt-2";
 
   function handleClose() {
@@ -139,17 +153,19 @@ export default function UserDropdown({
             <User className="mr-2 h-4 w-4 text-muted-foreground" />
             Account
           </Link>
-          <Link
-            href={secondaryItem.href}
-            role="menuitem"
-            onClick={handleClose}
-            className={`flex items-center rounded-lg px-3 py-2 text-sm hover:bg-secondary focus-visible:outline-none focus-visible:bg-secondary ${
-              secondaryActive ? "text-orange-600 bg-orange-50" : "text-foreground"
-            }`}
-          >
-            <SecondaryIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-            {secondaryItem.label}
-          </Link>
+          {secondaryItem && (
+            <Link
+              href={secondaryItem.href}
+              role="menuitem"
+              onClick={handleClose}
+              className={`flex items-center rounded-lg px-3 py-2 text-sm hover:bg-secondary focus-visible:outline-none focus-visible:bg-secondary ${
+                secondaryActive ? "text-orange-600 bg-orange-50" : "text-foreground"
+              }`}
+            >
+              <SecondaryIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+              {secondaryItem.label}
+            </Link>
+          )}
           <div className="my-1 h-px bg-border" />
           <button
             type="button"

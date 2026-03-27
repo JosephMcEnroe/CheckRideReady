@@ -122,7 +122,7 @@ export function FigmaLayout({ children }: { children: React.ReactNode }) {
             </Link>
           </nav>
           <div className="border-t border-border pt-4">
-            <UserDropdown menuDirection="up" />
+            <UserDropdown menuDirection="up" school={school} />
           </div>
         </div>
       </div>
@@ -143,7 +143,7 @@ export function FigmaLayout({ children }: { children: React.ReactNode }) {
           </div>
           <span className="font-semibold text-[#1e3a5f]">ProCheckride</span>
         </div>
-        <UserDropdown trigger="avatar" />
+        <UserDropdown trigger="avatar" school={school} />
       </div>
 
       {/* Mobile menu */}
@@ -178,7 +178,7 @@ export function FigmaLayout({ children }: { children: React.ReactNode }) {
               </Link>
             </nav>
             <div className="border-t border-border pt-4 mt-6">
-              <UserDropdown onNavigate={() => setMobileMenuOpen(false)} />
+              <UserDropdown onNavigate={() => setMobileMenuOpen(false)} school={school} />
             </div>
           </div>
         </div>
