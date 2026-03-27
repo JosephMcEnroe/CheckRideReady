@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Clock, Plane, PlayCircle, TrendingUp, Trophy } from "lucide-react";
 import { StatusBadge } from "@/components/figma/StatusBadge";
 import { readJsonResponse } from "@/lib/http";
@@ -140,7 +141,7 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2d5a8f] rounded-xl p-8 text-white shadow-lg">
+          <div className="bg-linear-to-r from-[#1e3a5f] to-[#2d5a8f] rounded-xl p-8 text-white shadow-lg">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
               <div className="space-y-2">
                 <h2 className="text-2xl font-semibold">Ready for your next session?</h2>

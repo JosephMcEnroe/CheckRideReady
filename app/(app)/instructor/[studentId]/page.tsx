@@ -1,18 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { readJsonResponse } from "@/lib/http";
-import { ArrowLeft, TrendingUp } from "lucide-react";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+import { ArrowLeft, Clock, MessageSquare, TrendingUp, AlertTriangle, ExternalLink } from "lucide-react";
+import { StatusBadge } from "@/components/figma/StatusBadge";
 
 type StudentData = {
   student: { id: string; name: string | null; email: string; certificate_goal: string | null };
@@ -25,37 +18,100 @@ type StudentData = {
     ended_at: string | null;
     score: number | null;
   }>;
-  acsAreas: Array<{ acs_task_code: string; mastery: number; attempts: number; passes: number; fails: number }>;
-  scoreTrend: Array<{ id: string; started_at: string; score: number | null }>;
   notes: Array<{ id: string; note_text: string; created_at: string }>;
+};
+
+type ACSArea = {
+  code: string;
+  name: string;
+  masteryPct: number;
+  attempts: number;
+  passes: number;
+  fails: number;
+  status: "Strong" | "Developing" | "Needs Work" | "Not Started";
+};
+
+type ProgressData = {
+  readiness: number;
+  stats: {
+    totalSessions: number;
+    questionsAnswered: number;
+    passRate: number;
+    weakestArea: string;
+  };
+  acsAreas: ACSArea[];
+  recentSessions: Array<{
+    id: string;
+    mode: string;
+    topic: string;
+    score: number | null;
+    result: string;
+    date: string;
+  }>;
 };
 
 type Note = { id: string; note_text: string; created_at: string };
 
-function acsStatus(mastery: number): "pass" | "probe" | "remediate" {
-  if (mastery >= 3.5) return "pass";
-  if (mastery >= 2) return "probe";
-  return "remediate";
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
-function formatSessionDate(value: string) {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+function getReadinessColor(pct: number) {
+  if (pct >= 80) return "bg-[#22c55e]/10 text-[#22c55e] border-[#22c55e]/30";
+  if (pct >= 50) return "bg-[#fbbf24]/10 text-[#fbbf24] border-[#fbbf24]/30";
+  return "bg-[#ef4444]/10 text-[#ef4444] border-[#ef4444]/30";
 }
 
-const resultColors: Record<string, string> = {
-  PASS: "bg-[#22c55e]/10 text-[#22c55e] border-[#22c55e]/20",
-  PROBE: "bg-[#fbbf24]/10 text-[#fbbf24] border-[#fbbf24]/20",
-  REMEDIATE: "bg-[#fb923c]/10 text-[#fb923c] border-[#fb923c]/20",
-  FAIL: "bg-[#ef4444]/10 text-[#ef4444] border-[#ef4444]/20",
-};
+function getMasteryStyle(masteryPct: number | null, status: string) {
+  if (status === "Not Started")
+    return {
+      border: "border-l-4 border-l-gray-300",
+      bg: "bg-gray-50",
+      badgeColor: "bg-gray-100 text-gray-500",
+    };
+  if (masteryPct !== null && masteryPct >= 80)
+    return {
+      border: "border-l-4 border-l-[#22c55e]",
+      bg: "bg-[#22c55e]/5",
+      badgeColor: "bg-[#22c55e]/10 text-[#22c55e]",
+    };
+  if (masteryPct !== null && masteryPct >= 60)
+    return {
+      border: "border-l-4 border-l-[#fbbf24]",
+      bg: "bg-[#fbbf24]/5",
+      badgeColor: "bg-[#fbbf24]/10 text-[#fbbf24]",
+    };
+  if (masteryPct !== null && masteryPct >= 40)
+    return {
+      border: "border-l-4 border-l-[#fb923c]",
+      bg: "bg-[#fb923c]/5",
+      badgeColor: "bg-[#fb923c]/10 text-[#fb923c]",
+    };
+  return {
+    border: "border-l-4 border-l-[#ef4444]",
+    bg: "bg-[#ef4444]/5",
+    badgeColor: "bg-[#ef4444]/10 text-[#ef4444]",
+  };
+}
+
+function getBarColor(masteryPct: number | null, status: string) {
+  if (status === "Not Started") return "bg-gray-200";
+  if (masteryPct !== null && masteryPct >= 80) return "bg-[#22c55e]";
+  if (masteryPct !== null && masteryPct >= 60) return "bg-[#fbbf24]";
+  if (masteryPct !== null && masteryPct >= 40) return "bg-[#fb923c]";
+  return "bg-[#ef4444]";
+}
 
 export default function StudentDetailPage() {
   const router = useRouter();
   const { studentId } = useParams() as { studentId: string };
 
   const [data, setData] = useState<StudentData | null>(null);
+  const [progressData, setProgressData] = useState<ProgressData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,11 +127,19 @@ export default function StudentDetailPage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/instructor/students/${studentId}`);
-        const json = await readJsonResponse<StudentData & { error?: string }>(res);
-        if (!res.ok) throw new Error(json.error || "Failed to load student");
-        setData(json);
-        setNotes(json.notes || []);
+        const [studentRes, progressRes] = await Promise.all([
+          fetch(`/api/instructor/students/${studentId}`),
+          fetch(`/api/instructor/students/${studentId}/progress`),
+        ]);
+        const studentJson = await readJsonResponse<StudentData & { error?: string }>(studentRes);
+        if (!studentRes.ok) throw new Error(studentJson.error || "Failed to load student");
+        setData(studentJson);
+        setNotes(studentJson.notes || []);
+
+        if (progressRes.ok) {
+          const progressJson = await readJsonResponse<ProgressData>(progressRes);
+          setProgressData(progressJson);
+        }
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : "Failed to load");
       } finally {
@@ -121,20 +185,17 @@ export default function StudentDetailPage() {
     }
   }
 
-  const chartData = (data?.scoreTrend || []).map((s, i) => ({
-    session: i + 1,
-    score: s.score ?? 0,
-  }));
-
   if (loading) {
     return (
       <div className="space-y-6 animate-pulse">
         <div className="h-8 bg-muted rounded w-48" />
-        <div className="h-64 bg-muted rounded-xl" />
-        <div className="grid grid-cols-2 gap-6">
-          <div className="h-48 bg-muted rounded-xl" />
-          <div className="h-48 bg-muted rounded-xl" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => <div key={i} className="h-20 bg-muted rounded-xl" />)}
         </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(8)].map((_, i) => <div key={i} className="h-28 bg-muted rounded-lg" />)}
+        </div>
+        <div className="h-48 bg-muted rounded-xl" />
       </div>
     );
   }
@@ -142,7 +203,10 @@ export default function StudentDetailPage() {
   if (error || !data) {
     return (
       <div className="space-y-4">
-        <button onClick={() => router.push("/instructor")} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+        <button
+          onClick={() => router.push("/instructor")}
+          className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+        >
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3">
@@ -152,7 +216,8 @@ export default function StudentDetailPage() {
     );
   }
 
-  const { student, sessions, acsAreas } = data;
+  const { student } = data;
+  const totalSessions = progressData?.stats.totalSessions ?? 0;
 
   return (
     <div className="space-y-6">
@@ -171,132 +236,140 @@ export default function StudentDetailPage() {
           <div className="flex items-center gap-3 text-sm">
             <span className="text-muted-foreground">{student.certificate_goal || "No track set"}</span>
             <span className="text-muted-foreground">•</span>
-            <span className="text-muted-foreground">{sessions.length} sessions completed</span>
+            <span className="text-muted-foreground">{totalSessions} sessions completed</span>
           </div>
         </div>
-      </div>
-
-      {/* Grade trend chart */}
-      <div className="bg-card rounded-xl border border-border p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <TrendingUp className="w-5 h-5 text-[#22c55e]" />
-          <h2 className="text-foreground text-lg font-semibold">Grade Trend</h2>
-        </div>
-        {chartData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis
-                dataKey="session"
-                stroke="var(--muted-foreground)"
-                label={{ value: "Session", position: "insideBottom", offset: -5 }}
-              />
-              <YAxis
-                stroke="var(--muted-foreground)"
-                label={{ value: "Score", angle: -90, position: "insideLeft" }}
-                domain={[0, 100]}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "var(--card)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "8px",
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="score"
-                stroke="#ff6b35"
-                strokeWidth={2}
-                dot={{ fill: "#ff6b35" }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <p className="text-sm text-muted-foreground text-center py-12">No session data yet</p>
+        {progressData && (
+          <div
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-semibold ${getReadinessColor(progressData.readiness)}`}
+          >
+            {progressData.readiness}% Ready
+          </div>
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* ACS areas */}
-        <div className="bg-card rounded-xl border border-border p-5">
-          <h2 className="text-foreground mb-3 text-lg font-semibold">ACS Knowledge Areas</h2>
-          <p className="text-muted-foreground text-xs mb-4">Color-coded performance across different areas</p>
-          {acsAreas.length > 0 ? (
-            <div className="grid grid-cols-2 gap-2">
-              {acsAreas.map((area) => {
-                const status = acsStatus(Number(area.mastery));
-                return (
-                  <div
-                    key={area.acs_task_code}
-                    className={`p-3 rounded-lg border text-sm font-medium ${
-                      status === "pass"
-                        ? "bg-[#22c55e]/10 border-[#22c55e]/20 text-[#22c55e]"
-                        : status === "probe"
-                        ? "bg-[#fbbf24]/10 border-[#fbbf24]/20 text-[#fbbf24]"
-                        : "bg-[#ef4444]/10 border-[#ef4444]/20 text-[#ef4444]"
-                    }`}
-                  >
-                    {area.acs_task_code}
-                  </div>
-                );
-              })}
+      {/* Stats row */}
+      {progressData && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { label: "Total Sessions", value: progressData.stats.totalSessions, icon: Clock, color: "text-[#1e3a5f]" },
+            { label: "Questions Answered", value: progressData.stats.questionsAnswered, icon: MessageSquare, color: "text-[#1e3a5f]" },
+            { label: "Overall Pass Rate", value: `${progressData.stats.passRate}%`, icon: TrendingUp, color: "text-[#22c55e]" },
+            { label: "Weakest Area", value: progressData.stats.weakestArea, icon: AlertTriangle, color: "text-[#ff6b35]" },
+          ].map((stat) => (
+            <div
+              key={stat.label}
+              className="bg-card rounded-lg border border-border p-4 shadow-sm hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-[#1e3a5f]/5">
+                  <stat.icon className={`h-5 w-5 ${stat.color}`} />
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">{stat.label}</p>
+                  <p className="text-foreground text-lg font-semibold">{stat.value}</p>
+                </div>
+              </div>
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No ACS data yet</p>
-          )}
+          ))}
         </div>
+      )}
 
-        {/* Recent sessions */}
-        <div className="bg-card rounded-xl border border-border p-5">
-          <h2 className="text-foreground mb-4 text-lg font-semibold">Recent Sessions</h2>
-          {sessions.length > 0 ? (
-            <div className="space-y-3">
-              {sessions.slice(0, 5).map((session) => {
-                const result = session.overall_grade || session.status?.toUpperCase() || "PROBE";
-                return (
-                  <div
-                    key={session.id}
-                    className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-secondary/50 transition-colors"
-                  >
-                    <div className="flex-1">
-                      <p className="text-foreground text-sm mb-0.5">{formatSessionDate(session.started_at)}</p>
-                      <p className="text-muted-foreground text-xs">
-                        Score: {session.score !== null ? `${session.score}%` : "—"}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className={`inline-flex items-center rounded-md px-2.5 py-1 border font-medium text-xs ${resultColors[result] || resultColors.PROBE}`}>
-                        {result}
+      {/* ACS Knowledge Areas */}
+      <div>
+        <h2 className="text-foreground mb-1 text-lg font-semibold">ACS Knowledge Areas</h2>
+        <p className="text-muted-foreground text-sm mb-4">
+          Color coded by mastery level across all sessions
+        </p>
+        {!progressData || progressData.acsAreas.length === 0 ? (
+          <p className="text-muted-foreground text-sm">No ACS data yet. Student needs to complete sessions.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {progressData.acsAreas.map((area) => {
+              const style = getMasteryStyle(area.masteryPct, area.status);
+              return (
+                <div
+                  key={area.code}
+                  className={`${style.border} ${style.bg} rounded-lg border border-border overflow-hidden shadow-sm hover:shadow-md transition-shadow`}
+                >
+                  <div className="p-4 space-y-3">
+                    <p className="text-foreground text-sm font-medium">{area.name}</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-foreground text-2xl font-semibold">
+                        {area.status !== "Not Started" ? `${area.masteryPct}%` : "—"}
                       </span>
-                      <button
-                        onClick={() => router.push(`/sessions/${session.id}/debrief`)}
-                        className="text-xs text-[#1e3a5f] hover:underline font-medium"
-                      >
-                        View
-                      </button>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${style.badgeColor}`}>
+                        {area.status}
+                      </span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          ) : (
+                  <div className="h-1.5 bg-gray-100">
+                    <div
+                      className={`h-full ${getBarColor(area.masteryPct, area.status)} transition-all`}
+                      style={{ width: area.status !== "Not Started" ? `${area.masteryPct}%` : "0%" }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Recent Sessions */}
+      <div>
+        <h2 className="text-foreground mb-4 text-lg font-semibold">Recent Sessions</h2>
+        {!progressData || progressData.recentSessions.length === 0 ? (
+          <div className="bg-card rounded-lg border border-border p-6">
             <p className="text-sm text-muted-foreground">No sessions yet</p>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="bg-card rounded-lg border border-border shadow-sm overflow-hidden">
+            <div className="divide-y divide-border">
+              {progressData.recentSessions.map((session, index) => (
+                <div
+                  key={session.id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between px-5 py-4 gap-3 hover:bg-muted/30 transition-colors"
+                >
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div>
+                      <p className="text-foreground text-sm font-medium">
+                        Session #{progressData.recentSessions.length - index}
+                      </p>
+                      <p className="text-muted-foreground text-xs">{formatDate(session.date)}</p>
+                    </div>
+                    <span className="text-muted-foreground text-sm hidden sm:inline">·</span>
+                    <span className="text-foreground text-sm">{session.topic}</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-foreground text-sm font-medium">
+                      {session.score !== null ? `${session.score}%` : "—"}
+                    </span>
+                    <StatusBadge status={session.result as "PASS" | "PROBE" | "REMEDIATE" | "FAIL" | "IN_PROGRESS"} />
+                    <Link
+                      href={`/sessions/${session.id}/debrief`}
+                      className="text-[#1e3a5f] text-sm hover:underline flex items-center gap-1"
+                    >
+                      View Debrief <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Instructor Notes */}
       <div className="bg-card rounded-xl border border-border p-5 space-y-4">
         <h2 className="text-foreground text-lg font-semibold">Instructor Notes</h2>
 
-        {/* Existing notes feed */}
         {notes.length > 0 && (
           <div className="space-y-3">
             {notes.map((note) => (
               <div key={note.id} className="rounded-lg bg-[#fefce8] border border-yellow-200 p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs text-muted-foreground">{formatSessionDate(note.created_at)}</p>
+                  <p className="text-xs text-muted-foreground">{formatDate(note.created_at)}</p>
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleDeleteNote(note.id)}
@@ -312,7 +385,6 @@ export default function StudentDetailPage() {
           </div>
         )}
 
-        {/* New note input */}
         <textarea
           value={newNote}
           onChange={(e) => setNewNote(e.target.value)}
@@ -320,12 +392,8 @@ export default function StudentDetailPage() {
           placeholder="Add notes about this student's progress, areas to focus on, or any concerns..."
         />
 
-        {noteSaved && (
-          <p className="text-sm text-green-600">Note saved.</p>
-        )}
-        {noteError && (
-          <p className="text-sm text-red-600">{noteError}</p>
-        )}
+        {noteSaved && <p className="text-sm text-green-600">Note saved.</p>}
+        {noteError && <p className="text-sm text-red-600">{noteError}</p>}
 
         <div className="flex justify-end">
           <button

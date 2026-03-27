@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { readJsonResponse } from "@/lib/http";
 import { Plus, Search, X } from "lucide-react";
@@ -399,6 +400,12 @@ export default function SchoolStudentsPage() {
                           >
                             {isUnassigned ? "Assign" : "Reassign"}
                           </button>
+                          <Link
+                            href={`/instructor/${student.id}`}
+                            className="inline-flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline font-medium"
+                          >
+                            View Progress →
+                          </Link>
                           <button
                             onClick={() =>
                               setRemovingStudentId(isConfirmingRemove ? null : student.id)
