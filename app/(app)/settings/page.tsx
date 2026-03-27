@@ -1,11 +1,26 @@
-import { Bell, HelpCircle, Shield, User } from "lucide-react";
+import { Bell, Building2, HelpCircle, Shield, User } from "lucide-react";
 import { auth } from "@/auth";
+import { pool } from "@/lib/db";
 import SignOutButton from "@/components/nav/SignOutButton";
 
 export default async function SettingsPage() {
   const session = await auth();
   const name = session?.user?.name || "";
   const email = session?.user?.email || "";
+  const userId = (session?.user as { id?: string } | undefined)?.id;
+
+  let school: { name: string; icao_identifier: string | null; role: string } | null = null;
+  if (userId) {
+    const [rows] = await pool.execute(
+      `SELECT s.name, s.icao_identifier, sm.role
+       FROM schools s
+       JOIN school_members sm ON sm.school_id = s.id
+       WHERE sm.user_id = ?
+       LIMIT 1`,
+      [userId]
+    );
+    school = (rows as any[])[0] || null;
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -42,6 +57,37 @@ export default async function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {school && (
+        <div className="bg-card rounded-xl border border-border p-6 shadow-sm space-y-4">
+          <div className="flex items-center gap-3">
+            <Building2 className="h-5 w-5 text-[#1e3a5f]" />
+            <h2 className="font-semibold text-foreground">Flight School</h2>
+          </div>
+          <div className="space-y-4 pl-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">School Name</label>
+                <input
+                  type="text"
+                  value={school.name}
+                  readOnly
+                  className="w-full p-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Based At</label>
+                <input
+                  type="text"
+                  value={school.icao_identifier || "—"}
+                  readOnly
+                  className="w-full p-3 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-card rounded-xl border border-border p-6 shadow-sm space-y-4">
         <div className="flex items-center gap-3">
