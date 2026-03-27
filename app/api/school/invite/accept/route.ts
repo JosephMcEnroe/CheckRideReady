@@ -48,45 +48,69 @@ export async function POST(req: Request) {
     return Response.json({ requiresAuth: true, token }, { status: 200 });
   }
 
-  const [inviteRows] = await pool.execute(
-    `SELECT * FROM school_invites WHERE token = ? AND accepted_at IS NULL LIMIT 1`,
-    [token]
-  );
-  const invite = (inviteRows as any[])[0];
-  if (!invite) {
-    return Response.json({ error: "Invite not found or expired" }, { status: 404 });
-  }
+  try {
+    const [inviteRows] = await pool.execute(
+      `SELECT * FROM school_invites WHERE token = ? AND accepted_at IS NULL LIMIT 1`,
+      [token]
+    );
+    const invite = (inviteRows as any[])[0];
+    if (!invite) {
+      return Response.json({ error: "Invite not found or expired" }, { status: 404 });
+    }
 
-  if (new Date(invite.expires_at) < new Date()) {
-    return Response.json({ error: "This invite has expired" }, { status: 400 });
-  }
+    if (new Date(invite.expires_at) < new Date()) {
+      return Response.json({ error: "This invite has expired" }, { status: 400 });
+    }
 
-  // Check not already a member
-  const [memberCheck] = await pool.execute(
-    `SELECT id FROM school_members WHERE school_id = ? AND user_id = ? LIMIT 1`,
-    [invite.school_id, userId]
-  );
-  if ((memberCheck as any[]).length > 0) {
-    return Response.json({ error: "Already a member of this school" }, { status: 400 });
-  }
+    // Verify logged in user's email matches the invite email
+    const [userRows] = await pool.execute(
+      "SELECT email FROM users WHERE id = ? LIMIT 1",
+      [userId]
+    );
+    const userEmail = (userRows as any[])[0]?.email;
 
-  await pool.execute(
-    `INSERT INTO school_members (id, school_id, user_id, role) VALUES (?, ?, ?, ?)`,
-    [crypto.randomUUID(), invite.school_id, userId, invite.role]
-  );
+    if (userEmail && invite.email &&
+        userEmail.toLowerCase() !== invite.email.toLowerCase()) {
+      return Response.json({
+        error: `This invite was sent to ${invite.email}. Please sign out and sign in with that email address to accept.`,
+        wrongAccount: true,
+        inviteEmail: invite.email,
+      }, { status: 403 });
+    }
 
-  // If student and has assigned instructor, link them
-  if (invite.role === "student" && invite.assigned_instructor_id) {
+    // Check not already a member
+    const [memberCheck] = await pool.execute(
+      `SELECT id FROM school_members WHERE school_id = ? AND user_id = ? LIMIT 1`,
+      [invite.school_id, userId]
+    );
+    if ((memberCheck as any[]).length > 0) {
+      return Response.json({ error: "Already a member of this school" }, { status: 400 });
+    }
+
     await pool.execute(
-      `INSERT INTO instructor_students (id, school_id, instructor_id, student_id) VALUES (?, ?, ?, ?)`,
-      [crypto.randomUUID(), invite.school_id, invite.assigned_instructor_id, userId]
+      `INSERT INTO school_members (id, school_id, user_id, role) VALUES (?, ?, ?, ?)`,
+      [crypto.randomUUID(), invite.school_id, userId, invite.role]
+    );
+
+    // If student and has assigned instructor, link them
+    if (invite.role === "student" && invite.assigned_instructor_id) {
+      await pool.execute(
+        `INSERT INTO instructor_students (id, school_id, instructor_id, student_id) VALUES (?, ?, ?, ?)`,
+        [crypto.randomUUID(), invite.school_id, invite.assigned_instructor_id, userId]
+      );
+    }
+
+    await pool.execute(
+      `UPDATE school_invites SET accepted_at = NOW() WHERE token = ?`,
+      [token]
+    );
+
+    return Response.json({ success: true, schoolId: invite.school_id, role: invite.role });
+  } catch (err: unknown) {
+    console.error("Invite accept error:", err);
+    return Response.json(
+      { error: err instanceof Error ? err.message : "Failed to accept invite" },
+      { status: 500 }
     );
   }
-
-  await pool.execute(
-    `UPDATE school_invites SET accepted_at = NOW() WHERE token = ?`,
-    [token]
-  );
-
-  return Response.json({ success: true, schoolId: invite.school_id, role: invite.role });
 }

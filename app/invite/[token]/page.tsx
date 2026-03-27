@@ -49,11 +49,23 @@ export default function InviteAcceptPage() {
         requiresAuth?: boolean;
         token?: string;
         error?: string;
+        wrongAccount?: boolean;
+        inviteEmail?: string;
       }>(res);
 
       if (data.requiresAuth) {
-        localStorage.setItem("pending_invite_token", token);
+        localStorage.setItem("pending_invite_url", `/invite/${token}`);
         router.push("/login");
+        return;
+      }
+
+      if (data.wrongAccount) {
+        setError(
+          `This invite was sent to ${data.inviteEmail}. ` +
+          `You are signed in with a different account. ` +
+          `Please sign out and sign back in with ${data.inviteEmail}.`
+        );
+        setAccepting(false);
         return;
       }
 

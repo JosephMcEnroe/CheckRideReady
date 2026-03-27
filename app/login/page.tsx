@@ -24,19 +24,13 @@ function LoginPageContent() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      const pendingInviteToken = localStorage.getItem("pending_invite_token");
-      if (pendingInviteToken) {
-        localStorage.removeItem("pending_invite_token");
-        fetch("/api/school/invite/accept", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token: pendingInviteToken }),
-        }).finally(() => {
-          router.replace(callbackUrl);
-        });
-      } else {
-        router.replace(callbackUrl);
+      const pendingInviteUrl = localStorage.getItem("pending_invite_url");
+      if (pendingInviteUrl) {
+        localStorage.removeItem("pending_invite_url");
+        router.replace(pendingInviteUrl);
+        return;
       }
+      router.replace(callbackUrl);
     }
   }, [callbackUrl, router, status]);
 
