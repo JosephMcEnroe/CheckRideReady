@@ -20,13 +20,13 @@ const ACS_AREA_NAMES: Record<string, string> = {
 
 export async function GET(
   _req: Request,
-  { params }: { params: { studentId: string } }
+  { params }: { params: Promise<{ studentId: string }> }
 ) {
   const authSession = await auth();
   const callerId = (authSession?.user as { id?: string } | undefined)?.id;
   if (!callerId) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { studentId } = params;
+  const { studentId } = await params;
 
   // Verify caller is assigned instructor OR admin in the same school
   const [instrRows] = await pool.execute(
