@@ -11,13 +11,24 @@ export async function GET(
 
   const { studentId } = await params;
 
-  // Verify caller is assigned instructor for this student
+  // Verify caller is assigned instructor OR admin in the same school
   const [assignRows] = await pool.execute(
     `SELECT id FROM instructor_students WHERE instructor_id = ? AND student_id = ? LIMIT 1`,
     [userId, studentId]
   );
-  if ((assignRows as any[]).length === 0) {
-    return Response.json({ error: "Forbidden" }, { status: 403 });
+  const isInstructor = (assignRows as any[]).length > 0;
+
+  if (!isInstructor) {
+    const [adminRows] = await pool.execute(
+      `SELECT sm1.id FROM school_members sm1
+       JOIN school_members sm2 ON sm2.school_id = sm1.school_id
+       WHERE sm1.user_id = ? AND sm1.role = 'admin' AND sm2.user_id = ?
+       LIMIT 1`,
+      [userId, studentId]
+    );
+    if ((adminRows as any[]).length === 0) {
+      return Response.json({ error: "Forbidden" }, { status: 403 });
+    }
   }
 
   const [studentRows] = await pool.execute(
@@ -63,8 +74,14 @@ export async function GET(
   const scoreTrend = (trendRows as any[]).reverse();
 
   const [noteRows] = await pool.execute(
-    `SELECT id, note_text, created_at FROM cfi_notes WHERE student_id = ? AND instructor_id = ? ORDER BY created_at DESC`,
-    [studentId, userId]
+    `SELECT cn.id, cn.note_text, cn.created_at
+     FROM cfi_notes cn
+     WHERE cn.student_id = ?
+       AND (cn.instructor_id = ? OR EXISTS (
+         SELECT 1 FROM school_members WHERE user_id = ? AND role = 'admin'
+       ))
+     ORDER BY cn.created_at DESC`,
+    [studentId, userId, userId]
   );
 
   return Response.json({
