@@ -138,5 +138,7 @@ export async function GET() {
   return Response.json({
     stats: { totalStudents, sessionsThisWeek, atRiskStudents, passRate },
     students: enriched,
+  }, {
+    headers: { "Cache-Control": "private, max-age=60, stale-while-revalidate=30" },
   });
 }

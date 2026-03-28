@@ -83,6 +83,8 @@ export async function GET() {
     question_count: row.question_count === null ? null : Number(row.question_count),
   }));
 
-  return Response.json({ sessions });
+  return Response.json({ sessions }, {
+    headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=10" },
+  });
 }
 

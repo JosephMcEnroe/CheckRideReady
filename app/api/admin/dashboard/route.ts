@@ -164,5 +164,7 @@ export async function GET() {
       developing: Number(rdRow.developing) || 0,
       needsWork: Number(rdRow.needsWork) || 0,
     },
+  }, {
+    headers: { "Cache-Control": "private, max-age=60, stale-while-revalidate=30" },
   });
 }

@@ -44,7 +44,7 @@ export default function SessionsPage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch("/api/sessions/list", { cache: "no-store" });
+        const res = await fetch("/api/sessions/list");
         const json = await readJsonResponse<{ sessions?: SessionListItem[]; error?: string }>(res);
         if (!res.ok) throw new Error(json.error || "Failed to load sessions");
         setSessions(json.sessions || []);
@@ -100,7 +100,28 @@ export default function SessionsPage() {
         </div>
       </div>
 
-      {loading && <div className="text-muted-foreground">Loading sessions...</div>}
+      {loading && (
+        <div className="space-y-3 animate-pulse">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="bg-card rounded-xl border border-border p-6 shadow-sm">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div className="flex-1 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-5 w-40 bg-muted rounded" />
+                    <div className="h-5 w-16 bg-muted rounded-full" />
+                  </div>
+                  <div className="flex gap-6">
+                    <div className="h-4 w-32 bg-muted rounded" />
+                    <div className="h-4 w-20 bg-muted rounded" />
+                    <div className="h-4 w-20 bg-muted rounded" />
+                  </div>
+                </div>
+                <div className="h-5 w-5 bg-muted rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       {error && <div className="rounded-lg border border-red-200 bg-red-50 text-red-700 px-4 py-3">{error}</div>}
 
       {!loading && !error && (

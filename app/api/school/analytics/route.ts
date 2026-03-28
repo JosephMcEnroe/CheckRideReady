@@ -161,5 +161,7 @@ export async function GET(req: Request) {
       passRate: Number(r.pass_rate || 0),
       lastActive: r.last_active,
     })),
+  }, {
+    headers: { "Cache-Control": "private, max-age=300, stale-while-revalidate=60" },
   });
 }

@@ -45,7 +45,7 @@ export default function DashboardPage() {
       setError(null);
       try {
         const [sessionsRes, schoolRes] = await Promise.all([
-          fetch("/api/sessions/list", { cache: "no-store" }),
+          fetch("/api/sessions/list"),
           fetch("/api/school/mine"),
         ]);
         const sessionsJson = await readJsonResponse<{ sessions?: SessionListItem[]; error?: string }>(sessionsRes);
@@ -96,6 +96,25 @@ export default function DashboardPage() {
 
   // Brand new user — no school, no sessions
   const isNewUser = school === null && sessions.length === 0 && !loading;
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto space-y-8 animate-pulse">
+        <div className="space-y-2">
+          <div className="h-8 w-64 bg-muted rounded" />
+          <div className="h-4 w-96 bg-muted rounded" />
+        </div>
+        <div className="h-36 bg-muted rounded-xl" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[...Array(3)].map((_, i) => <div key={i} className="h-24 bg-muted rounded-xl" />)}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="h-56 bg-muted rounded-xl" />
+          <div className="h-56 bg-muted rounded-xl" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -223,10 +242,9 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              {loading && <p className="text-sm text-muted-foreground">Loading latest session...</p>}
               {error && <p className="text-sm text-red-600">{error}</p>}
 
-              {!loading && !error && latestSession && (
+              {!error && latestSession && (
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-muted-foreground">Date</span>
@@ -249,7 +267,7 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {!loading && !error && !latestSession && (
+              {!error && !latestSession && (
                 <p className="text-sm text-muted-foreground">No sessions yet. Start your first one.</p>
               )}
 
