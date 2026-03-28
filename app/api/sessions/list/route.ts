@@ -23,77 +23,84 @@ export async function GET(req: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { searchParams } = new URL(req.url);
-  const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "20", 10), 1), 100);
-  const offset = Math.max(parseInt(searchParams.get("offset") ?? "0", 10), 0);
+  try {
+    const { searchParams } = new URL(req.url);
+    const limit = Math.min(parseInt(searchParams.get("limit") ?? "20", 10), 100);
+    const offset = parseInt(searchParams.get("offset") ?? "0", 10);
 
-  const [[{ total }]] = await pool.execute(
-    `SELECT COUNT(*) as total FROM oral_sessions WHERE user_id = ?`,
-    [userId]
-  ) as [[{ total: number }], unknown];
+    const [[{ total }]] = await pool.execute(
+      `SELECT COUNT(*) as total FROM oral_sessions WHERE user_id = ?`,
+      [userId]
+    ) as [[{ total: number }], unknown];
 
-  const [rows] = await pool.execute(
-    `
-    SELECT
-      s.id,
-      COALESCE(s.started_at, s.created_at) AS created_at,
-      COALESCE(topic.latest_topic, s.current_acs_task_code, s.mode) AS topic,
-      s.last_result,
-      stats.score,
-      CASE
-        WHEN s.started_at IS NULL THEN NULL
-        WHEN s.ended_at IS NULL THEN TIMESTAMPDIFF(SECOND, s.started_at, NOW())
-        ELSE TIMESTAMPDIFF(SECOND, s.started_at, s.ended_at)
-      END AS duration_seconds,
-      stats.question_count
-    FROM oral_sessions s
-    LEFT JOIN (
+    const [rows] = await pool.execute(
+      `
       SELECT
-        sq.session_id,
-        ROUND(
-          AVG(
-            CASE sq.result
-              WHEN 'PASS' THEN 1.0
-              WHEN 'PROBE' THEN 0.7
-              WHEN 'REMEDIATE' THEN 0.4
-              WHEN 'FAIL' THEN 0.0
-              ELSE NULL
-            END
-          ) * 100
-        ) AS score,
-        COUNT(*) AS question_count
-      FROM session_questions sq
-      WHERE sq.result IS NOT NULL
-      GROUP BY sq.session_id
-    ) stats ON stats.session_id = s.id
-    LEFT JOIN (
-      SELECT sq1.session_id, sq1.acs_task AS latest_topic
-      FROM session_questions sq1
-      INNER JOIN (
-        SELECT session_id, MAX(id) AS max_id
-        FROM session_questions
-        GROUP BY session_id
-      ) latest ON latest.session_id = sq1.session_id AND latest.max_id = sq1.id
-    ) topic ON topic.session_id = s.id
-    WHERE s.user_id = ?
-    ORDER BY COALESCE(s.started_at, s.created_at) DESC
-    LIMIT ? OFFSET ?
-    `,
-    [userId, limit, offset]
-  );
+        s.id,
+        COALESCE(s.started_at, s.created_at) AS created_at,
+        COALESCE(topic.latest_topic, s.current_acs_task_code, s.mode) AS topic,
+        s.last_result,
+        stats.score,
+        CASE
+          WHEN s.started_at IS NULL THEN NULL
+          WHEN s.ended_at IS NULL THEN TIMESTAMPDIFF(SECOND, s.started_at, NOW())
+          ELSE TIMESTAMPDIFF(SECOND, s.started_at, s.ended_at)
+        END AS duration_seconds,
+        stats.question_count
+      FROM oral_sessions s
+      LEFT JOIN (
+        SELECT
+          sq.session_id,
+          ROUND(
+            AVG(
+              CASE sq.result
+                WHEN 'PASS' THEN 1.0
+                WHEN 'PROBE' THEN 0.7
+                WHEN 'REMEDIATE' THEN 0.4
+                WHEN 'FAIL' THEN 0.0
+                ELSE NULL
+              END
+            ) * 100
+          ) AS score,
+          COUNT(*) AS question_count
+        FROM session_questions sq
+        WHERE sq.result IS NOT NULL
+        GROUP BY sq.session_id
+      ) stats ON stats.session_id = s.id
+      LEFT JOIN (
+        SELECT sq1.session_id, sq1.acs_task AS latest_topic
+        FROM session_questions sq1
+        INNER JOIN (
+          SELECT session_id, MAX(id) AS max_id
+          FROM session_questions
+          GROUP BY session_id
+        ) latest ON latest.session_id = sq1.session_id AND latest.max_id = sq1.id
+      ) topic ON topic.session_id = s.id
+      WHERE s.user_id = ?
+      ORDER BY COALESCE(s.started_at, s.created_at) DESC
+      LIMIT ${limit} OFFSET ${offset}
+      `,
+      [userId]
+    );
 
-  const sessions = (rows as SessionListRow[]).map((row) => ({
-    id: row.id,
-    created_at: row.created_at,
-    topic: row.topic,
-    last_result: row.last_result,
-    score: row.score === null ? null : Number(row.score),
-    duration_seconds: row.duration_seconds === null ? null : Number(row.duration_seconds),
-    question_count: row.question_count === null ? null : Number(row.question_count),
-  }));
+    const sessions = (rows as SessionListRow[]).map((row) => ({
+      id: row.id,
+      created_at: row.created_at,
+      topic: row.topic,
+      last_result: row.last_result,
+      score: row.score === null ? null : Number(row.score),
+      duration_seconds: row.duration_seconds === null ? null : Number(row.duration_seconds),
+      question_count: row.question_count === null ? null : Number(row.question_count),
+    }));
 
-  return Response.json({ sessions, total: Number(total), limit, offset }, {
-    headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=10" },
-  });
+    return Response.json({ sessions, total: Number(total) }, {
+      headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=10" },
+    });
+  } catch (err: unknown) {
+    console.error("Sessions list error:", err);
+    return Response.json(
+      { error: err instanceof Error ? err.message : "Failed" },
+      { status: 500 }
+    );
+  }
 }
-
