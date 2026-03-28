@@ -33,9 +33,13 @@ function formatDuration(seconds: number | null) {
   return `${mins} min`;
 }
 
+const PAGE_SIZE = 20;
+
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | ResultCode>("all");
 
@@ -44,10 +48,11 @@ export default function SessionsPage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch("/api/sessions/list");
-        const json = await readJsonResponse<{ sessions?: SessionListItem[]; error?: string }>(res);
+        const res = await fetch(`/api/sessions/list?limit=${PAGE_SIZE}&offset=0`);
+        const json = await readJsonResponse<{ sessions?: SessionListItem[]; total?: number; error?: string }>(res);
         if (!res.ok) throw new Error(json.error || "Failed to load sessions");
         setSessions(json.sessions || []);
+        setTotal(json.total ?? 0);
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : "Failed to load sessions");
       } finally {
@@ -55,6 +60,21 @@ export default function SessionsPage() {
       }
     })();
   }, []);
+
+  async function loadMore() {
+    setLoadingMore(true);
+    try {
+      const res = await fetch(`/api/sessions/list?limit=${PAGE_SIZE}&offset=${sessions.length}`);
+      const json = await readJsonResponse<{ sessions?: SessionListItem[]; total?: number; error?: string }>(res);
+      if (!res.ok) throw new Error(json.error || "Failed to load more");
+      setSessions((prev) => [...prev, ...(json.sessions || [])]);
+      setTotal(json.total ?? total);
+    } catch {
+      // silently fail — existing sessions still visible
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   const filteredSessions = useMemo(() => {
     if (filter === "all") return sessions;
@@ -172,6 +192,18 @@ export default function SessionsPage() {
           {filteredSessions.length === 0 && (
             <div className="text-center py-12">
               <p className="text-muted-foreground">No sessions found with this filter.</p>
+            </div>
+          )}
+
+          {filter === "all" && sessions.length < total && (
+            <div className="text-center pt-2">
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="px-6 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors disabled:opacity-50"
+              >
+                {loadingMore ? "Loading..." : `Load more (${total - sessions.length} remaining)`}
+              </button>
             </div>
           )}
         </div>

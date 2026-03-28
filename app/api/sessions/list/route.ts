@@ -16,12 +16,21 @@ type SessionListRow = {
   question_count: number | null;
 };
 
-export async function GET() {
+export async function GET(req: Request) {
   const authSession = await auth();
   const userId = (authSession?.user as { id?: string } | undefined)?.id;
   if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const { searchParams } = new URL(req.url);
+  const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "20", 10), 1), 100);
+  const offset = Math.max(parseInt(searchParams.get("offset") ?? "0", 10), 0);
+
+  const [[{ total }]] = await pool.execute(
+    `SELECT COUNT(*) as total FROM oral_sessions WHERE user_id = ?`,
+    [userId]
+  ) as [[{ total: number }], unknown];
 
   const [rows] = await pool.execute(
     `
@@ -68,9 +77,9 @@ export async function GET() {
     ) topic ON topic.session_id = s.id
     WHERE s.user_id = ?
     ORDER BY COALESCE(s.started_at, s.created_at) DESC
-    LIMIT 100
+    LIMIT ? OFFSET ?
     `,
-    [userId]
+    [userId, limit, offset]
   );
 
   const sessions = (rows as SessionListRow[]).map((row) => ({
@@ -83,7 +92,7 @@ export async function GET() {
     question_count: row.question_count === null ? null : Number(row.question_count),
   }));
 
-  return Response.json({ sessions }, {
+  return Response.json({ sessions, total: Number(total), limit, offset }, {
     headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=10" },
   });
 }

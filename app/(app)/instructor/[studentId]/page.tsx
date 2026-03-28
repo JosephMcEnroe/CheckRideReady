@@ -127,19 +127,17 @@ export default function StudentDetailPage() {
       setLoading(true);
       setError(null);
       try {
-        const [studentRes, progressRes] = await Promise.all([
-          fetch(`/api/instructor/students/${studentId}`),
-          fetch(`/api/instructor/students/${studentId}/progress`),
-        ]);
-        const studentJson = await readJsonResponse<StudentData & { error?: string }>(studentRes);
-        if (!studentRes.ok) throw new Error(studentJson.error || "Failed to load student");
-        setData(studentJson);
-        setNotes(studentJson.notes || []);
-
-        if (progressRes.ok) {
-          const progressJson = await readJsonResponse<ProgressData>(progressRes);
-          setProgressData(progressJson);
-        }
+        const res = await fetch(`/api/instructor/students/${studentId}`);
+        const json = await readJsonResponse<StudentData & ProgressData & { error?: string }>(res);
+        if (!res.ok) throw new Error(json.error || "Failed to load student");
+        setData(json);
+        setNotes(json.notes || []);
+        setProgressData({
+          readiness: json.readiness,
+          stats: json.stats,
+          acsAreas: json.acsAreas,
+          recentSessions: json.recentSessions,
+        });
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : "Failed to load");
       } finally {
