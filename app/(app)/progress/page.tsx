@@ -358,7 +358,7 @@ export default function ProgressPage() {
             </p>
           </div>
           <button
-            onClick={() => alert("Coming soon")}
+            onClick={() => setError("This feature is coming soon")}
             className="bg-[#1e3a5f] hover:bg-[#162d4a] text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap"
           >
             Download Readiness Report

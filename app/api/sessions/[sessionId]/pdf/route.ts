@@ -335,7 +335,7 @@ export async function GET(
         }
       );
     } else {
-      for (let idx = 0; idx < questions.length; idx++) {
+      for (let idx = 0; idx < questions.length; idx += 1) {
         const q = questions[idx];
         const number = idx + 1;
         const qResult = q.result || "N/A";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { readJsonResponse } from "@/lib/http";
 import { Trash2, UserPlus } from "lucide-react";
@@ -43,6 +43,7 @@ export default function SchoolSettingsPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
 
   function showSuccess(msg: string) {
     setSuccessMessage(msg);
@@ -108,8 +109,8 @@ export default function SchoolSettingsPage() {
     }
   }
 
-  async function handleRemove(memberId: string, memberName: string) {
-    if (!confirm(`Remove ${memberName} from the school?`)) return;
+  async function handleRemove(memberId: string) {
+    setConfirmRemoveId(null);
     setRemovingId(memberId);
     setErrorMessage(null);
     try {
@@ -117,7 +118,7 @@ export default function SchoolSettingsPage() {
       const data = await readJsonResponse<{ success?: boolean; error?: string }>(res);
       if (!res.ok) throw new Error(data.error || "Failed to remove member");
       setMembers((prev) => prev.filter((m) => m.id !== memberId));
-      showSuccess(`${memberName} removed from school`);
+      showSuccess("Member removed from school");
     } catch (e: unknown) {
       showError(e instanceof Error ? e.message : "Failed to remove member");
     } finally {
@@ -221,7 +222,8 @@ export default function SchoolSettingsPage() {
                 const isAdmin = member.role === "admin";
                 const canModify = !isCurrentUser && !isAdmin;
                 return (
-                  <tr key={member.id} className="hover:bg-secondary/20 transition-colors">
+                  <React.Fragment key={member.id}>
+                  <tr className="hover:bg-secondary/20 transition-colors">
                     <td className="py-3 px-4 text-sm font-medium text-foreground">
                       {member.name || "—"}
                       {isCurrentUser && (
@@ -255,7 +257,7 @@ export default function SchoolSettingsPage() {
                     </td>
                     <td className="py-3 px-4">
                       <button
-                        onClick={() => handleRemove(member.id, member.name || member.email)}
+                        onClick={() => setConfirmRemoveId(member.id)}
                         disabled={!canModify || removingId === member.id}
                         className="p-1.5 rounded-lg text-muted-foreground hover:text-[#ef4444] hover:bg-[#ef4444]/5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                         title={!canModify ? "Cannot remove this member" : "Remove member"}
@@ -264,6 +266,30 @@ export default function SchoolSettingsPage() {
                       </button>
                     </td>
                   </tr>
+                  {confirmRemoveId === member.id && (
+                    <tr>
+                      <td colSpan={5} className="px-4 pb-3">
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-red-50 border border-red-200 mt-2">
+                          <p className="text-sm text-red-700 flex-1">
+                            Remove this member from the school?
+                          </p>
+                          <button
+                            onClick={() => handleRemove(confirmRemoveId)}
+                            className="text-xs font-medium text-white bg-red-500 hover:bg-red-600 px-3 py-1.5 rounded-lg transition-colors"
+                          >
+                            Yes, Remove
+                          </button>
+                          <button
+                            onClick={() => setConfirmRemoveId(null)}
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 );
               })}
             </tbody>

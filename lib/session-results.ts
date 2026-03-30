@@ -164,11 +164,11 @@ export async function getSessionResults(
   const counts = { total: 0, passCount: 0, probeCount: 0, remediateCount: 0, failCount: 0 };
   for (const q of questions) {
     if (q.result === null) continue;
-    counts.total++;
-    if (q.result === "PASS") counts.passCount++;
-    else if (q.result === "PROBE") counts.probeCount++;
-    else if (q.result === "REMEDIATE") counts.remediateCount++;
-    else if (q.result === "FAIL") counts.failCount++;
+    counts.total += 1;
+    if (q.result === "PASS") counts.passCount += 1;
+    else if (q.result === "PROBE") counts.probeCount += 1;
+    else if (q.result === "REMEDIATE") counts.remediateCount += 1;
+    else if (q.result === "FAIL") counts.failCount += 1;
   }
 
   const effectiveOverallGrade =

@@ -1,18 +1,14 @@
 import { pool } from "@/lib/db";
 import { auth } from "@/auth";
+import { getInstructorSchoolId } from "@/lib/instructor-auth";
 
 export async function GET() {
   const authSession = await auth();
   const userId = (authSession?.user as { id?: string } | undefined)?.id;
   if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const [memberRows] = await pool.execute(
-    `SELECT school_id FROM school_members WHERE user_id = ? AND role = 'instructor' LIMIT 1`,
-    [userId]
-  );
-  if ((memberRows as any[]).length === 0) {
-    return Response.json({ error: "Not an instructor" }, { status: 403 });
-  }
+  const schoolId = await getInstructorSchoolId(userId);
+  if (!schoolId) return Response.json({ error: "Not an instructor" }, { status: 403 });
 
   const [[totalRow], [weekRow], [atRiskRow]] = await Promise.all([
     pool.execute(

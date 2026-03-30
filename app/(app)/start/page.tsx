@@ -6,6 +6,13 @@ import { readJsonResponse } from "@/lib/http";
 import { WeatherContextCard } from "@/components/figma/WeatherContextCard";
 import { Pencil, Check, AlertTriangle, Building2 } from "lucide-react";
 
+const AIRCRAFT_OPTIONS = [
+  "Cessna 172", "Cessna 152", "Piper Cherokee",
+  "Piper Archer", "Piper Warrior", "Cirrus SR20",
+  "Cirrus SR22", "Beechcraft Bonanza", "Cessna 182",
+  "Diamond DA40", "Diamond DA20",
+];
+
 type Certificate = "Private" | "Instrument" | "Commercial";
 
 const ACS_FOCUS_AREAS: Record<Certificate, string[]> = {
@@ -113,6 +120,7 @@ export default function StartPage() {
         if (data.user.certificate_goal && goalToCert[data.user.certificate_goal]) {
           setCertificate(goalToCert[data.user.certificate_goal]);
         }
+
       } catch {
         // silently fail
       }

@@ -30,14 +30,14 @@ export async function GET(req: Request) {
     const wdir = m.wdir;
     const wspd = m.wspd;
     let wind: string | undefined;
-    if (wdir != null && wspd != null) {
+    if (wdir !== null && wspd !== null) {
       const dirStr = wdir === 0 || wdir === "VRB" ? "Variable" : `${wdir}°`;
       wind = `${dirStr} at ${wspd}kt`;
     }
 
     // Visibility
     const visibility: string | undefined =
-      m.visib != null ? `${m.visib}SM` : undefined;
+      m.visib !== null ? `${m.visib}SM` : undefined;
 
     // Ceiling — first BKN or OVC layer
     let ceiling: string | undefined;

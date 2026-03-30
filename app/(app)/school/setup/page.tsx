@@ -28,10 +28,10 @@ export default function SchoolSetupPage() {
       .then((data) => {
         if (data.school?.role === "admin") {
           // Already an admin — go to school management
-          router.replace("/school/invite");
+          return router.replace("/school/invite");
         } else {
           // No school, or a non-admin member — not allowed here
-          router.replace("/dashboard");
+          return router.replace("/dashboard");
         }
       })
       .catch(() => router.replace("/dashboard"));
