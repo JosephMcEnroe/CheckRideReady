@@ -1,6 +1,6 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, PlayCircle, Target } from "lucide-react";
+import { CheckCircle2, Target } from "lucide-react";
 import MobileNav from "@/components/marketing/MobileNav";
 
 const FeaturesSection = dynamic(() => import("@/components/marketing/FeaturesSection"), {
@@ -61,29 +61,22 @@ export default function LandingPage() {
                   Pass Your Checkride Like a Pro.
                 </h1>
                 <p className="text-xl text-muted-foreground">
-                  AI-powered FAA oral exam simulator built for serious student pilots and flight schools.
+                  AI-powered oral exam prep built specifically for flight schools and the student pilots they train.
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row gap-4">
-                <Link
-                  href="/login"
-                  className="inline-flex items-center justify-center gap-2 bg-[#ff6b35] hover:bg-[#ff5722] text-white px-8 py-4 rounded-lg font-medium transition-colors shadow-lg"
-                >
-                  <PlayCircle className="h-5 w-5" />
-                  Start Free Trial
-                </Link>
                 <a
-                  href="#how-it-works"
-                  className="inline-flex items-center justify-center gap-2 bg-white hover:bg-secondary border border-border text-foreground px-8 py-4 rounded-lg font-medium transition-colors"
+                  href="mailto:jcmcenroe@rit.edu?subject=ProCheckride"
+                  className="inline-flex items-center gap-2 bg-[#1e3a5f] hover:bg-[#162d4a] text-white px-6 py-3 rounded-lg font-medium transition-colors text-base"
                 >
-                  View Demo
-                  <ArrowRight className="h-5 w-5" />
+                  Get in Touch
                 </a>
               </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <CheckCircle2 className="h-4 w-4 text-[#22c55e]" />
-                <span>7-day free trial - No credit card required</span>
-              </div>
+              <p className="text-sm text-muted-foreground flex items-center gap-2">
+                <span>Currently in early access</span>
+                <span>·</span>
+                <span>Working with our first partner schools</span>
+              </p>
             </div>
 
             {/* ── Desktop session mockup (full complexity) ── */}
