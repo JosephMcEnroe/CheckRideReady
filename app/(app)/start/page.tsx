@@ -117,8 +117,8 @@ export default function StartPage() {
           setSchoolName(data.school.name);
         }
         if (data.user.aircraft_type) setAircraft(data.user.aircraft_type);
-        if (data.user.certificate_goal && goalToCert[data.user.certificate_goal]) {
-          setCertificate(goalToCert[data.user.certificate_goal]);
+        if (data.user.certificate_goal && goalToCert[data.user.certificate_goal] === "Private") {
+          setCertificate("Private");
         }
 
       } catch {
@@ -230,21 +230,41 @@ export default function StartPage() {
         <div className="rounded-xl border border-border bg-card shadow-sm p-5 space-y-3">
           <h2 className="font-semibold text-foreground">Certificate</h2>
           <div className="flex gap-2 flex-wrap">
-            {(["Private", "Instrument", "Commercial"] as Certificate[]).map((cert) => (
-              <button
-                key={cert}
-                onClick={() => {
-                  setCertificate(cert);
-                  setSelectedAreas([]);
-                }}
-                className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
-                  certificate === cert
-                    ? "bg-[#1e3a5f] text-white border-[#1e3a5f]"
-                    : "bg-card text-foreground border-border hover:border-[#1e3a5f]/40"
-                }`}
-              >
-                {cert}
-              </button>
+            <button
+              onClick={() => {
+                setCertificate("Private");
+                setSelectedAreas([]);
+              }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
+                certificate === "Private"
+                  ? "bg-[#1e3a5f] text-white border-[#1e3a5f]"
+                  : "bg-card text-foreground border-border hover:border-[#1e3a5f]/40"
+              }`}
+            >
+              Private
+            </button>
+            {(["Instrument", "Commercial"] as const).map((cert) => (
+              <div key={cert} className="relative flex-1 group">
+                <button
+                  disabled
+                  className="w-full py-2 rounded-lg text-sm font-medium
+                    bg-white text-gray-300 border border-gray-200
+                    cursor-not-allowed opacity-50"
+                >
+                  {cert}
+                </button>
+                <span className="absolute -top-2 -right-1 px-1.5 py-0.5
+                  rounded-full bg-gray-200 text-gray-500 text-[10px]
+                  font-medium leading-none">
+                  Soon
+                </span>
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2
+                  mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded
+                  whitespace-nowrap opacity-0 group-hover:opacity-100
+                  transition-opacity pointer-events-none">
+                  Coming soon
+                </div>
+              </div>
             ))}
           </div>
         </div>
