@@ -35,7 +35,7 @@ function masteryDeltaFromEvaluation(e: OpenAIEvaluation) {
 }
 
 function isMastery(e: OpenAIEvaluation) {
-  return e.result === "PASS" && e.confidence >= 0.8 && e.missing_points.length === 0;
+  return e.result === "PASS" && e.confidence >= 0.85 && e.missing_points.length === 0;
 }
 
 function normalizeText(v: string) {
@@ -131,7 +131,7 @@ export async function POST(req: Request) {
     }
 
     let fallbackQuestion:
-      | { id: string; acs_task_code: string; stem: string }
+      | { id: string; acs_task_code: string; stem: string; must_include?: string | null }
       | undefined;
     if (!promptRow || !promptRow.acs_task) {
       if (!baseQuestionId) {
@@ -141,7 +141,7 @@ export async function POST(req: Request) {
         );
       }
       const [qRows] = await pool.execute(
-        `SELECT id, acs_task_code, stem
+        `SELECT id, acs_task_code, stem, must_include
          FROM questions
          WHERE id = ?
          LIMIT 1`,
@@ -220,11 +220,16 @@ export async function POST(req: Request) {
       ? { airport: resolvedAirport, aircraft: session.aircraft ?? null, raw: schoolNote }
       : null;
 
+    const mustInclude = fallbackQuestion?.must_include
+      ? (() => { try { return JSON.parse(fallbackQuestion.must_include!); } catch { return undefined; } })()
+      : undefined;
+
     const evalResult =
       (await evaluateWithOpenAI({
         questionStem,
         studentAnswer: answer,
         acsTaskCode,
+        mustInclude,
         escalationLevel,
         priorFollowUps,
         priorThread: threadRows.map((row) => ({

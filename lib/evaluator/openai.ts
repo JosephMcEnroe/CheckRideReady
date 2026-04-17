@@ -15,6 +15,7 @@ type EvaluateInput = {
   questionStem: string;
   studentAnswer: string;
   acsTaskCode: string;
+  mustInclude?: string[];
   escalationLevel?: number;
   priorFollowUps?: string[];
   priorThread?: Array<{
@@ -53,12 +54,14 @@ Credit the student for EVERYTHING they said correctly.
 Only penalize for what is genuinely missing or incorrect.
 
 Scoring guide:
-- PASS: Student demonstrated solid understanding of the topic. Answer is complete, accurate, and shows applied knowledge. Minor omissions are acceptable if core concept is correct.
-- PROBE: Answer is partially correct but missing 1-2 key points. Student shows understanding but needs to go deeper on something specific.
+- PASS: Student demonstrated comprehensive understanding. Answer must cover ALL or nearly all required points for this ACS task. Missing even one significant required point should result in PROBE not PASS. Do not give PASS if the student only partially covered the topic. Be strict — a real DPE would probe any gap in knowledge.
+- PROBE: Answer is mostly correct but missing 1-2 specific points that a DPE would follow up on. This is the most common result for a decent but incomplete answer.
 - REMEDIATE: Answer has significant gaps or some incorrect information. Student needs to review this topic before retesting.
 - FAIL: Answer is fundamentally wrong, unsafe, or shows dangerous misunderstanding. Reserve FAIL for genuinely bad answers only.
 
 IMPORTANT: If a student explicitly cites a specific FAR or AIM section and correctly applies it, that MUST be credited. Do not give FAIL if the student clearly demonstrated the required knowledge.
+
+Only give confidence above 0.8 if the answer is truly comprehensive and covers all required points with specific details and regulatory references.
 
 Feedback must be 2-3 sentences. Be specific about what was good and what specifically was missing — not generic criticism.
 Reference FAR/AIM sections when relevant (e.g. FAR 91.155, AIM 7-1-27).
@@ -274,12 +277,17 @@ export async function evaluateWithOpenAI(input: EvaluateInput): Promise<OpenAIEv
 
   const scoringSystemPrompt = wctx ? SCORING_SYSTEM_PROMPT + WEATHER_SYSTEM_ADDENDUM : SCORING_SYSTEM_PROMPT;
 
+  const mustIncludeBlock =
+    input.mustInclude && input.mustInclude.length > 0
+      ? `\nRequired points this answer MUST cover to pass:\n${input.mustInclude.map((p) => `- ${p}`).join("\n")}\n\nScore PASS only if the answer addresses ALL of these points.\nScore PROBE if 1-2 points are missing.\nScore REMEDIATE if 3 or more points are missing.\nScore FAIL only for dangerous or fundamentally wrong answers.\n`
+      : "";
+
   const baseUserPrompt = `IMPORTANT: Read the student's complete answer carefully before scoring. Credit everything they said correctly. Only penalize genuine gaps.
 
 ${weatherBlock}Current examiner prompt: ${input.questionStem}
 ACS task code: ${input.acsTaskCode}
 Student answer: ${input.studentAnswer}
-Current escalation level: ${escalationLevel}
+${mustIncludeBlock}Current escalation level: ${escalationLevel}
 Prior thread context:
 ${threadContext}
 Prior follow-up questions (do not repeat or paraphrase these):
